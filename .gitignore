@@ -37,6 +37,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local data imports (customer PII etc - never commit)
+/data/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

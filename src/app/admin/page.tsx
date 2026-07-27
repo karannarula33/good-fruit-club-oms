@@ -9,12 +9,17 @@ export default async function AdminPage() {
       <h1 className="text-xl font-semibold">Admin</h1>
       <p className="text-neutral-600">
         Welcome, {profile.full_name || profile.phone}. Order Entry,
-        Procurement, Customers &amp; Ledger, and the Status board land in
+        Procurement, the full Customer Ledger, and the Status board land in
         later slices.
       </p>
-      <Link href="/admin/prices" className="text-sm underline text-neutral-900">
-        Prices
-      </Link>
+      <div className="flex gap-4">
+        <Link href="/admin/prices" className="text-sm underline text-neutral-900">
+          Prices
+        </Link>
+        <Link href="/admin/customers" className="text-sm underline text-neutral-900">
+          Customers
+        </Link>
+      </div>
     </div>
   );
 }

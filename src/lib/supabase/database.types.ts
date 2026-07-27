@@ -5,6 +5,16 @@
 
 export type Role = "admin" | "packer" | "delivery";
 export type UnitType = "weight" | "count";
+export type CustomerZone =
+  | "DLF Phase 2"
+  | "Sushant Lok"
+  | "Near Hamilton Court"
+  | "DLF Phase 1"
+  | "Phase 3"
+  | "Phase 4"
+  | "Phase 5"
+  | "Outside Gurgaon"
+  | "Unassigned";
 
 export interface Database {
   public: {
@@ -123,6 +133,36 @@ export interface Database {
           version_id?: string;
           product_id?: string;
           price_per_unit?: number;
+        };
+        Relationships: [];
+      };
+      customers: {
+        Row: {
+          id: string;
+          display_name: string;
+          phone: string | null;
+          address: string;
+          zone: CustomerZone;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          display_name: string;
+          phone?: string | null;
+          address: string;
+          zone: CustomerZone;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          display_name?: string;
+          phone?: string | null;
+          address?: string;
+          zone?: CustomerZone;
+          notes?: string | null;
+          created_at?: string;
         };
         Relationships: [];
       };
