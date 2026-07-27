@@ -15,6 +15,15 @@ export type CustomerZone =
   | "Phase 5"
   | "Outside Gurgaon"
   | "Unassigned";
+export type OrderStatus =
+  | "recorded"
+  | "packed"
+  | "dispatched"
+  | "out_for_delivery"
+  | "delivered"
+  | "cancelled";
+export type LineStatus = "pending" | "packed" | "unavailable";
+export type ParseConfidence = "clean" | "flagged";
 
 export interface Database {
   public: {
@@ -163,6 +172,90 @@ export interface Database {
           zone?: CustomerZone;
           notes?: string | null;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      orders: {
+        Row: {
+          id: string;
+          customer_id: string;
+          placed_at: string;
+          delivery_date: string;
+          status: OrderStatus;
+          status_timestamps: Record<string, string>;
+          raw_paste: string | null;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id: string;
+          placed_at: string;
+          delivery_date: string;
+          status?: OrderStatus;
+          status_timestamps?: Record<string, string>;
+          raw_paste?: string | null;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          customer_id?: string;
+          placed_at?: string;
+          delivery_date?: string;
+          status?: OrderStatus;
+          status_timestamps?: Record<string, string>;
+          raw_paste?: string | null;
+          notes?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      order_lines: {
+        Row: {
+          id: string;
+          order_id: string;
+          product_id: string | null;
+          ordered_qty: number | null;
+          ordered_unit: string | null;
+          locked_price_per_unit: number | null;
+          actual_qty: number | null;
+          line_status: LineStatus;
+          is_substitution: boolean;
+          substituted_for_line_id: string | null;
+          parse_confidence: ParseConfidence | null;
+          parse_note: string | null;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          product_id?: string | null;
+          ordered_qty?: number | null;
+          ordered_unit?: string | null;
+          locked_price_per_unit?: number | null;
+          actual_qty?: number | null;
+          line_status?: LineStatus;
+          is_substitution?: boolean;
+          substituted_for_line_id?: string | null;
+          parse_confidence?: ParseConfidence | null;
+          parse_note?: string | null;
+        };
+        Update: {
+          id?: string;
+          order_id?: string;
+          product_id?: string | null;
+          ordered_qty?: number | null;
+          ordered_unit?: string | null;
+          locked_price_per_unit?: number | null;
+          actual_qty?: number | null;
+          line_status?: LineStatus;
+          is_substitution?: boolean;
+          substituted_for_line_id?: string | null;
+          parse_confidence?: ParseConfidence | null;
+          parse_note?: string | null;
         };
         Relationships: [];
       };

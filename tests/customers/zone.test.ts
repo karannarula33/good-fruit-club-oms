@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compareByZone, deriveZoneFromAddress, ZONE_ORDER } from "@/lib/customers/zone";
+import { compareByZone, deriveZoneFromAddress, ZONE_ORDER, type Zone } from "@/lib/customers/zone";
 
 describe("deriveZoneFromAddress", () => {
   it("matches DLF Phase 2 including its aliases", () => {
@@ -52,7 +52,8 @@ describe("compareByZone", () => {
   });
 
   it("sorts Unassigned after every real zone", () => {
-    const sorted = ["Unassigned", "Outside Gurgaon"].sort(compareByZone);
+    const shuffled: Zone[] = ["Unassigned", "Outside Gurgaon"];
+    const sorted = [...shuffled].sort(compareByZone);
     expect(sorted).toEqual(["Outside Gurgaon", "Unassigned"]);
   });
 });

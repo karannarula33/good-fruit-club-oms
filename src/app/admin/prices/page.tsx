@@ -1,6 +1,8 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { resolvePrices, type PriceItemRecord } from "@/lib/pricing/resolve";
+import { resolvePrices } from "@/lib/pricing/resolve";
+import { loadPriceItemRecords } from "@/lib/pricing/load";
+import { loadCatalogEntries } from "@/lib/catalog/load";
 import { formatIstDisplay } from "@/lib/time/ist";
 import { PricePasteReview } from "./price-paste-review";
 
@@ -9,37 +11,13 @@ export default async function AdminPricesPage() {
 
   const supabase = await createClient();
 
-  const [{ data: products }, { data: priceItemRows }, { data: aliasRows }] = await Promise.all([
+  const [{ data: products }, priceItems, catalog] = await Promise.all([
     supabase.from("products").select("id, name, unit_type, unit_label").eq("active", true).order("name"),
-    supabase
-      .from("price_items")
-      .select("product_id, price_per_unit, price_versions(effective_from, created_at)"),
-    supabase.from("product_aliases").select("product_id, alias"),
+    loadPriceItemRecords(supabase),
+    loadCatalogEntries(supabase),
   ]);
 
-  const priceItems: PriceItemRecord[] = (priceItemRows ?? [])
-    .filter((row) => row.price_versions)
-    .map((row) => ({
-      productId: row.product_id,
-      pricePerUnit: row.price_per_unit,
-      effectiveFrom: new Date((row.price_versions as unknown as { effective_from: string }).effective_from),
-      versionCreatedAt: new Date((row.price_versions as unknown as { created_at: string }).created_at),
-    }));
-
   const resolved = resolvePrices(priceItems, new Date());
-
-  const aliasesByProduct = new Map<string, string[]>();
-  for (const row of aliasRows ?? []) {
-    const list = aliasesByProduct.get(row.product_id) ?? [];
-    list.push(row.alias);
-    aliasesByProduct.set(row.product_id, list);
-  }
-
-  const catalog = (products ?? []).map((product) => ({
-    id: product.id,
-    name: product.name,
-    aliases: aliasesByProduct.get(product.id) ?? [],
-  }));
 
   return (
     <div className="p-6 space-y-8">

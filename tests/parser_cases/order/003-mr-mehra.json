@@ -1,0 +1,9 @@
+{
+  "raw_paste": "Exotica sector 53\nTower C2 flag 1201\nMr. Mehra\n2kg Chausa",
+  "expected": {
+    "customer": { "confidence": "flagged" },
+    "lines": [
+      { "product_name": "Chausa Mango", "qty": 2, "confidence": "clean" }
+    ]
+  }
+}

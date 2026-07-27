@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval:price-parser": "tsx --env-file=.env.local scripts/eval-price-parser.ts",
+    "eval:order-parser": "tsx --env-file=.env.local scripts/eval-order-parser.ts",
     "import:customers": "tsx --env-file=.env.local scripts/import-customers.ts"
   },
   "dependencies": {

@@ -1,0 +1,17 @@
+{
+  "raw_paste": "Hi! I'd like to place an order 🛒\n\n* Mandarin Orange – 1 kg @ ₹300/kg = ₹300\n* New Zealand Apple – 1 kg @ ₹460/kg = ₹460\n* Afghan Cherry – 1 box @ ₹750/box = ₹750\n* Afghan Khurmani (Apricot) – 1 box @ ₹680/box = ₹680\n* Jamun – 2 boxes @ ₹350/box = ₹700\n* Golden Kiwi – 1 box @ ₹500/box = ₹500\n* Papaya – 1 kg @ ₹150/kg = ₹150\n* Muscat Grapes – 1 box @ ₹480/box = ₹480\n* Anaar (Pomegranate) – 1 kg @ ₹450/kg = ₹450\n\nOrder Total: ₹4,470\n\nName: Archana \nPhone: 9910269303\nAddress: K-3/49, DLF Phase -2, Gurugram 12202, Haryana \nPayment: Cash on Delivery",
+  "expected": {
+    "customer": { "name": "Archana Kakkar", "confidence": "clean" },
+    "lines": [
+      { "product_name": "Mandarin Orange", "confidence": "clean" },
+      { "product_name": "Apple (New Zealand)", "confidence": "clean" },
+      { "product_name": "Afghan Cherry", "confidence": "clean" },
+      { "product_name": "Afghan Apricot", "confidence": "clean" },
+      { "product_name": "Jamun", "confidence": "clean" },
+      { "confidence": "flagged" },
+      { "product_name": "Papaya", "confidence": "clean" },
+      { "product_name": null, "confidence": "flagged" },
+      { "product_name": "Pomegranate", "confidence": "clean" }
+    ]
+  }
+}

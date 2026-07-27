@@ -3,14 +3,9 @@ import {
   PRICE_PARSER_SYSTEM_PROMPT,
   buildPriceParserUserMessage,
 } from "@/lib/prompts/price-parser";
+import { buildCatalogBlock, type CatalogEntry } from "@/lib/parser/catalog";
 
-export interface CatalogEntry {
-  id: string;
-  name: string;
-  aliases: string[];
-  unitLabel: string | null;
-}
-
+export type { CatalogEntry };
 export type ParseConfidence = "clean" | "flagged";
 export type FlagReason = "unknown_product" | "vague_price" | "ambiguous_unit" | null;
 
@@ -56,16 +51,6 @@ const PRICE_ITEMS_SCHEMA = {
   required: ["items"],
   additionalProperties: false,
 } as const;
-
-function buildCatalogBlock(catalog: CatalogEntry[]): string {
-  return catalog
-    .map((product) => {
-      const aliasSuffix = product.aliases.length > 0 ? ` (aka: ${product.aliases.join(", ")})` : "";
-      const unitSuffix = product.unitLabel ? ` [unit: ${product.unitLabel}]` : "";
-      return `- ${product.name}${aliasSuffix}${unitSuffix} [id: ${product.id}]`;
-    })
-    .join("\n");
-}
 
 function validateParsedItem(raw: unknown, index: number): ParsedPriceItem {
   if (typeof raw !== "object" || raw === null) {

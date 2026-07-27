@@ -5,9 +5,9 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { createClient } from "@supabase/supabase-js";
-import { parsePriceList, type CatalogEntry } from "../src/lib/parser/parse-price-list";
-import type { Database } from "../src/lib/supabase/database.types";
+import { parsePriceList } from "../src/lib/parser/parse-price-list";
+import { loadCatalogEntries } from "../src/lib/catalog/load";
+import { createServiceRoleClient } from "../src/lib/supabase/service-role";
 
 interface ExpectedItem {
   product_name: string | null;
@@ -21,38 +21,9 @@ interface Fixture {
   expected: ExpectedItem[];
 }
 
-async function loadCatalog(): Promise<CatalogEntry[]> {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRoleKey) {
-    throw new Error("NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set");
-  }
-
-  const supabase = createClient<Database>(url, serviceRoleKey);
-  const [{ data: products, error: productsError }, { data: aliases, error: aliasesError }] = await Promise.all([
-    supabase.from("products").select("id, name, unit_label").eq("active", true),
-    supabase.from("product_aliases").select("product_id, alias"),
-  ]);
-  if (productsError) throw new Error(productsError.message);
-  if (aliasesError) throw new Error(aliasesError.message);
-
-  const aliasesByProduct = new Map<string, string[]>();
-  for (const row of aliases ?? []) {
-    const list = aliasesByProduct.get(row.product_id) ?? [];
-    list.push(row.alias);
-    aliasesByProduct.set(row.product_id, list);
-  }
-
-  return (products ?? []).map((product) => ({
-    id: product.id,
-    name: product.name,
-    aliases: aliasesByProduct.get(product.id) ?? [],
-    unitLabel: product.unit_label,
-  }));
-}
-
 async function main() {
-  const catalog = await loadCatalog();
+  const supabase = createServiceRoleClient();
+  const catalog = await loadCatalogEntries(supabase);
   const nameById = new Map(catalog.map((product) => [product.id, product.name]));
 
   const fixturesDir = path.join(__dirname, "..", "tests", "parser_cases", "price");

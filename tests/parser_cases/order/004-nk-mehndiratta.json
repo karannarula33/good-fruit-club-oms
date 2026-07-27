@@ -1,0 +1,10 @@
+{
+  "raw_paste": "NK Mehndiratta \nAanar - 1 kg\nMariposa plum-Half kg (if possible) please. Mehndiratta",
+  "expected": {
+    "customer": { "name": "NK Mehndiratta", "confidence": "clean" },
+    "lines": [
+      { "product_name": "Pomegranate", "qty": 1 },
+      { "product_name": "Mariposa Plum", "qty": 0.5, "confidence": "clean" }
+    ]
+  }
+}
