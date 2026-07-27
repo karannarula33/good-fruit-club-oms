@@ -259,6 +259,30 @@ export interface Database {
         };
         Relationships: [];
       };
+      procurement_marks: {
+        Row: {
+          id: string;
+          delivery_date: string;
+          list_sent_at: string;
+          sent_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          delivery_date: string;
+          list_sent_at: string;
+          sent_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          delivery_date?: string;
+          list_sent_at?: string;
+          sent_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
