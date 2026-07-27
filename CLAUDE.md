@@ -18,7 +18,7 @@ The one primitive of this system is **"paste a WhatsApp message"** — orders, n
 
 - **Next.js (App Router) on Vercel** + **Supabase** (Postgres, Auth, Realtime, Storage).
 - Responsive web app, installable as PWA (manifest + icons + add-to-home-screen). Mobile-first for the Packing and Delivery views; desktop-comfortable for Order Entry and Prices.
-- **Auth:** Supabase phone OTP login. Roles: `admin`, `packer`, `delivery`. Enforce with Postgres row-level security, not just UI hiding.
+- **Auth:** Supabase phone + password login. Accounts are admin-provisioned (no self-serve signup) — the admin creates each staff login directly via the Supabase Admin API, so no SMS provider is required. Roles: `admin`, `packer`, `delivery`. Enforce with Postgres row-level security, not just UI hiding.
 - **LLM parsing runs server-side only** (Next.js API route / server action calling the Anthropic API). Never expose the API key client-side.
 - Schema changes only via version-controlled Supabase SQL migrations. Never mutate the schema ad hoc.
 - Timezone: **Asia/Kolkata everywhere.** Store timestamps as timestamptz; all cutoff logic computes in IST.
@@ -212,7 +212,7 @@ DLF Phase 2 (incl. Heritage City, The Vilas) → Sushant Lok → Near Hamilton C
 
 ## 8. Build order (vertical slices — deploy each live before the next)
 
-1. Scaffold: Next.js + Supabase + phone OTP auth + roles + RLS + Vercel deploy + PWA shell.
+1. Scaffold: Next.js + Supabase + phone+password auth + roles + RLS + Vercel deploy + PWA shell.
 2. Catalog + price versions (paste-publish flow). *Pricing gates billing — build first.*
 3. Customers (import directory CSV, zones).
 4. Order entry: paste → parse → review → save (delivery-date derivation + price lock + merge rule). Parser eval cases green.
