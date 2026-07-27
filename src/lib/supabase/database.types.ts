@@ -1,9 +1,10 @@
-// Hand-written for slice 1 (profiles only). Once the project is linked to a
-// real Supabase project, regenerate with:
+// Hand-written (profiles, catalog, price versions). Once the Supabase CLI is
+// available, regenerate with:
 //   supabase gen types typescript --linked > src/lib/supabase/database.types.ts
 // and delete this comment.
 
 export type Role = "admin" | "packer" | "delivery";
+export type UnitType = "weight" | "count";
 
 export interface Database {
   public: {
@@ -32,8 +33,111 @@ export interface Database {
         };
         Relationships: [];
       };
+      products: {
+        Row: {
+          id: string;
+          name: string;
+          unit_type: UnitType;
+          unit_label: string | null;
+          active: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          name: string;
+          unit_type: UnitType;
+          unit_label?: string | null;
+          active?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          name?: string;
+          unit_type?: UnitType;
+          unit_label?: string | null;
+          active?: boolean;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      product_aliases: {
+        Row: {
+          id: string;
+          product_id: string;
+          alias: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          alias: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          product_id?: string;
+          alias?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      price_versions: {
+        Row: {
+          id: string;
+          effective_from: string;
+          published_by: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          effective_from: string;
+          published_by?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          effective_from?: string;
+          published_by?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      price_items: {
+        Row: {
+          id: string;
+          version_id: string;
+          product_id: string;
+          price_per_unit: number;
+        };
+        Insert: {
+          id?: string;
+          version_id: string;
+          product_id: string;
+          price_per_unit: number;
+        };
+        Update: {
+          id?: string;
+          version_id?: string;
+          product_id?: string;
+          price_per_unit?: number;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      publish_price_version: {
+        Args: {
+          p_effective_from: string;
+          p_note: string | null;
+          p_items: { product_id: string; price_per_unit: number }[];
+          p_new_aliases: { product_id: string; alias: string }[];
+        };
+        Returns: string;
+      };
+    };
   };
 }

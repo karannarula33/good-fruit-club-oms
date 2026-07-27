@@ -1,0 +1,7 @@
+{
+  "raw_paste": "Chausa Mango: ₹295 / KG\n\nDragon Fruit: ₹400 / KG",
+  "expected": [
+    { "product_name": "Chausa Mango", "price": 295, "confidence": "clean" },
+    { "product_name": null, "price": 400, "confidence": "flagged", "flag_reason": "unknown_product" }
+  ]
+}

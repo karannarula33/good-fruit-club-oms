@@ -1,0 +1,21 @@
+{
+  "raw_paste": "Chausa Mango: ₹295 / KG\n\nBanarsi Langda Mango: ₹225 / KG\n\nAfghan Cherry: ₹750 / Box\n\nJumbo Blueberry: ₹330 / Box\n\nRed Globe Grapes: ₹520 / KG\n\nJamun: ₹350 / Box\n\nAfghan Apricot (Khurmani):: ₹680 / Box\n\nMariposa Plum: ₹420 / KG\n\nKashmiri Plums: ₹390 / KG\n\nApples (New Zealand): ₹460 / KG\n\nPears: ₹370 / KG\n\nAnaar (Pomegranate): ₹450 / KG\n\nMandarin Orange: ₹300 / KG\n\nMalta: ₹280 / KG\n\nAvocado: ₹160 / Piece\n\nPapaya: ₹150 / KG",
+  "expected": [
+    { "product_name": "Chausa Mango", "price": 295, "confidence": "clean" },
+    { "product_name": "Langra Mango", "price": 225, "confidence": "clean" },
+    { "product_name": "Afghan Cherry", "price": 750, "confidence": "clean" },
+    { "product_name": "Jumbo Blueberry", "price": 330, "confidence": "clean" },
+    { "product_name": "Red Globe Grapes", "price": 520, "confidence": "clean" },
+    { "product_name": "Jamun", "price": 350, "confidence": "clean" },
+    { "product_name": "Afghan Apricot", "price": 680, "confidence": "clean" },
+    { "product_name": "Mariposa Plum", "price": 420, "confidence": "clean" },
+    { "product_name": "Kashmiri Plums", "price": 390, "confidence": "clean" },
+    { "product_name": "Apple (New Zealand)", "price": 460, "confidence": "clean" },
+    { "product_name": "Pears", "price": 370, "confidence": "clean" },
+    { "product_name": "Pomegranate", "price": 450, "confidence": "clean" },
+    { "product_name": "Mandarin Orange", "price": 300, "confidence": "clean" },
+    { "product_name": "Malta", "price": 280, "confidence": "clean" },
+    { "product_name": "Avocado", "price": 160, "confidence": "clean" },
+    { "product_name": "Papaya", "price": 150, "confidence": "clean" }
+  ]
+}

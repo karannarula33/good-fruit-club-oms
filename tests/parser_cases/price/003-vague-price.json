@@ -1,0 +1,7 @@
+{
+  "raw_paste": "Papaya: ₹150 / KG\n\nKiwi - price on call",
+  "expected": [
+    { "product_name": "Papaya", "price": 150, "confidence": "clean" },
+    { "product_name": "Kiwi", "price": null, "confidence": "flagged", "flag_reason": "vague_price" }
+  ]
+}

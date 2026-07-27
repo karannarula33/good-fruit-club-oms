@@ -1,0 +1,7 @@
+{
+  "raw_paste": "Langda: ₹230 / KG\n\nKhurmani: ₹690 / Box",
+  "expected": [
+    { "product_name": "Langra Mango", "price": 230, "confidence": "clean" },
+    { "product_name": "Afghan Apricot", "price": 690, "confidence": "clean" }
+  ]
+}
