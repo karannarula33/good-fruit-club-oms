@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { roundToCents } from "@/lib/billing/compute";
+import { insertCredit } from "@/lib/billing/credit";
 import type { LedgerMode } from "@/lib/supabase/database.types";
 
 export interface RecordPaymentInput {
@@ -38,34 +39,16 @@ export async function recordPayment(
 
   const supabase = await createClient();
 
-  const { data: creditEntry, error: creditError } = await supabase
-    .from("ledger_entries")
-    .insert({
-      customer_id: input.customerId,
-      entry_type: "credit",
-      amount: input.amount,
-      mode: input.mode,
-      order_id: null,
-      note: input.note,
-      entered_by: profile.id,
-    })
-    .select("id")
-    .single();
-  if (creditError || !creditEntry) {
-    return { ok: false, error: creditError?.message ?? "Failed to record payment." };
-  }
-
-  if (input.allocations.length > 0) {
-    const { error: allocError } = await supabase.from("payment_allocations").insert(
-      input.allocations.map((allocation) => ({
-        ledger_entry_id: creditEntry.id,
-        order_id: allocation.orderId,
-        amount: allocation.amount,
-      })),
-    );
-    if (allocError) {
-      return { ok: false, error: allocError.message };
-    }
+  const result = await insertCredit(supabase, {
+    customerId: input.customerId,
+    amount: input.amount,
+    mode: input.mode,
+    note: input.note,
+    allocations: input.allocations,
+    enteredBy: profile.id,
+  });
+  if (!result.ok) {
+    return result;
   }
 
   revalidatePath(`/admin/customers/${input.customerId}`);

@@ -7,11 +7,8 @@ export default async function AdminPage() {
   return (
     <div className="p-6 space-y-4">
       <h1 className="text-xl font-semibold">Admin</h1>
-      <p className="text-neutral-600">
-        Welcome, {profile.full_name || profile.phone}. The full Customer
-        Ledger and the Status board land in later slices.
-      </p>
-      <div className="flex gap-4">
+      <p className="text-neutral-600">Welcome, {profile.full_name || profile.phone}.</p>
+      <div className="flex flex-wrap gap-4">
         <Link href="/admin/orders" className="text-sm underline text-neutral-900">
           Order Entry
         </Link>
@@ -23,6 +20,9 @@ export default async function AdminPage() {
         </Link>
         <Link href="/admin/customers" className="text-sm underline text-neutral-900">
           Customers
+        </Link>
+        <Link href="/status" className="text-sm underline text-neutral-900">
+          Status board
         </Link>
       </div>
     </div>

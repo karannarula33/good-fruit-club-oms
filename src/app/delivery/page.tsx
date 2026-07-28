@@ -1,15 +1,75 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
+import { createClient } from "@/lib/supabase/server";
+import { compareByZone, type Zone } from "@/lib/customers/zone";
+import { utcToIstDatetimeLocal } from "@/lib/time/ist";
+import { DeliveryStopCard } from "./delivery-stop-card";
+import { MarkOutForDeliveryButton } from "./mark-out-for-delivery-button";
+import type { OrderStatus } from "@/lib/supabase/database.types";
 
 export default async function DeliveryPage() {
   const profile = await requireRole(["delivery", "admin"]);
 
+  const supabase = await createClient();
+  const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
+
+  const { data: orders } = await supabase
+    .from("orders")
+    .select("id, status, customer_id, customers(display_name, phone, address, zone)")
+    .eq("delivery_date", today)
+    .in("status", ["dispatched", "out_for_delivery", "delivered"]);
+
+  const orderIds = (orders ?? []).map((o) => o.id);
+  const { data: bills } = orderIds.length
+    ? await supabase.from("bills").select("order_id, total, net_due").in("order_id", orderIds)
+    : { data: [] };
+  const billByOrderId = new Map((bills ?? []).map((b) => [b.order_id, b]));
+
+  const stops = (orders ?? [])
+    .map((order) => {
+      const customer = order.customers as unknown as {
+        display_name: string;
+        phone: string | null;
+        address: string;
+        zone: Zone;
+      } | null;
+      const bill = billByOrderId.get(order.id);
+      return {
+        id: order.id,
+        status: order.status as OrderStatus,
+        customerName: customer?.display_name ?? "Unknown customer",
+        phone: customer?.phone ?? null,
+        address: customer?.address ?? "",
+        zone: customer?.zone ?? ("Unassigned" as Zone),
+        billTotal: bill?.total ?? null,
+        netDue: bill?.net_due ?? null,
+      };
+    })
+    .sort((a, b) => compareByZone(a.zone, b.zone) || a.customerName.localeCompare(b.customerName));
+
+  const dispatchedCount = stops.filter((s) => s.status === "dispatched").length;
+
   return (
-    <div className="p-6">
-      <h1 className="text-xl font-semibold">Delivery route</h1>
-      <p className="text-neutral-600">
-        Welcome, {profile.full_name || profile.phone}. The route view lands
-        in a later slice.
-      </p>
+    <div className="p-4 space-y-4">
+      <div>
+        <h1 className="text-xl font-semibold">Delivery route</h1>
+        <p className="text-sm text-neutral-600">
+          {profile.full_name || profile.phone} · {stops.length} stop{stops.length === 1 ? "" : "s"} today
+        </p>
+        <Link href="/status" className="text-sm underline text-neutral-900">
+          Status board
+        </Link>
+      </div>
+
+      {dispatchedCount > 0 && <MarkOutForDeliveryButton />}
+
+      {stops.length === 0 && <p className="text-neutral-500">Nothing dispatched yet.</p>}
+
+      <div className="space-y-4">
+        {stops.map((stop) => (
+          <DeliveryStopCard key={stop.id} stop={stop} />
+        ))}
+      </div>
     </div>
   );
 }

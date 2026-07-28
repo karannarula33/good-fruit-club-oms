@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
@@ -87,6 +88,9 @@ export default async function PackerPage() {
           {profile.full_name || profile.phone} · {packingOrders.length} order
           {packingOrders.length === 1 ? "" : "s"} to pack today
         </p>
+        <Link href="/status" className="text-sm underline text-neutral-900">
+          Status board
+        </Link>
       </div>
 
       {packingOrders.length === 0 && <p className="text-neutral-500">Nothing to pack right now.</p>}
