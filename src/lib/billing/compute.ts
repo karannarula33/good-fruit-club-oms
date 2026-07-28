@@ -50,3 +50,13 @@ export function computeCustomerBalance(entries: LedgerEntryForBalance[]): number
 export function computeNetDue(billTotal: number, prevBalance: number): number {
   return roundToCents(billTotal + prevBalance);
 }
+
+// CLAUDE.md §3.7: "Every order derives a payment status: unpaid / partial
+// / paid (from sum of allocations vs bill amount)."
+export type PaymentStatus = "unpaid" | "partial" | "paid";
+
+export function derivePaymentStatus(billTotal: number, allocatedAmount: number): PaymentStatus {
+  if (allocatedAmount <= 0) return "unpaid";
+  if (allocatedAmount >= billTotal) return "paid";
+  return "partial";
+}

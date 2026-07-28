@@ -6,6 +6,7 @@ import { loadPriceItemRecords } from "@/lib/pricing/load";
 import { resolvePriceForProduct } from "@/lib/pricing/resolve";
 import { computeBillTotal, computeCustomerBalance, computeNetDue } from "@/lib/billing/compute";
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
+import { planAdvanceAllocation, type AdvanceCredit } from "@/lib/billing/allocate";
 
 export type GenerateBillResult =
   | { ok: true; messageText: string; customerPhone: string | null }
@@ -99,7 +100,7 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
 
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from("ledger_entries")
-    .select("entry_type, amount")
+    .select("id, entry_type, amount, created_at")
     .eq("customer_id", order.customer_id);
   if (ledgerError) {
     return { ok: false, reason: "error", error: ledgerError.message };
@@ -153,6 +154,47 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
   });
   if (debitError) {
     return { ok: false, reason: "error", error: debitError.message };
+  }
+
+  // CLAUDE.md §3.7: an existing advance auto-allocates, oldest-first, the
+  // next time a bill finalizes -- purely additive bookkeeping for deriving
+  // *this order's* payment status; it never touches total/prevBalance/
+  // netDue above, which already account for every credit regardless of
+  // allocation state.
+  const creditRows = (ledgerRows ?? []).filter((row) => row.entry_type === "credit");
+  if (creditRows.length > 0) {
+    const creditIds = creditRows.map((row) => row.id);
+    const { data: allocRows, error: allocError } = await supabase
+      .from("payment_allocations")
+      .select("ledger_entry_id, amount")
+      .in("ledger_entry_id", creditIds);
+    if (allocError) {
+      return { ok: false, reason: "error", error: allocError.message };
+    }
+    const allocatedByCredit = new Map<string, number>();
+    for (const row of allocRows ?? []) {
+      allocatedByCredit.set(row.ledger_entry_id, (allocatedByCredit.get(row.ledger_entry_id) ?? 0) + row.amount);
+    }
+    const advances: AdvanceCredit[] = creditRows.map((row) => ({
+      ledgerEntryId: row.id,
+      amount: row.amount,
+      allocatedSoFar: allocatedByCredit.get(row.id) ?? 0,
+      createdAt: new Date(row.created_at),
+    }));
+
+    const allocationPlan = planAdvanceAllocation({ advances, billTotal: total });
+    if (allocationPlan.length > 0) {
+      const { error: allocInsertError } = await supabase.from("payment_allocations").insert(
+        allocationPlan.map((item) => ({
+          ledger_entry_id: item.ledgerEntryId,
+          order_id: orderId,
+          amount: item.amount,
+        })),
+      );
+      if (allocInsertError) {
+        return { ok: false, reason: "error", error: allocInsertError.message };
+      }
+    }
   }
 
   // No revalidatePath here on purpose -- see the matching note in

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeBillTotal, computeCustomerBalance, computeNetDue } from "@/lib/billing/compute";
+import { computeBillTotal, computeCustomerBalance, computeNetDue, derivePaymentStatus } from "@/lib/billing/compute";
 
 describe("computeBillTotal", () => {
   it("sums qty * price across lines", () => {
@@ -63,5 +63,23 @@ describe("computeNetDue", () => {
 
   it("can go negative when an advance exceeds the new bill", () => {
     expect(computeNetDue(100, -500)).toBe(-400);
+  });
+});
+
+describe("derivePaymentStatus", () => {
+  it("is unpaid when nothing has been allocated", () => {
+    expect(derivePaymentStatus(500, 0)).toBe("unpaid");
+  });
+
+  it("is partial when some but not all has been allocated", () => {
+    expect(derivePaymentStatus(500, 200)).toBe("partial");
+  });
+
+  it("is paid when the allocated amount meets the bill total", () => {
+    expect(derivePaymentStatus(500, 500)).toBe("paid");
+  });
+
+  it("is paid when over-allocated", () => {
+    expect(derivePaymentStatus(500, 600)).toBe("paid");
   });
 });

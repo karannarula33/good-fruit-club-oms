@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { zonePriority } from "@/lib/customers/zone";
@@ -48,7 +49,11 @@ export default async function AdminCustomersPage() {
           <tbody>
             {sorted.map((customer) => (
               <tr key={customer.id} className="border-t border-neutral-200 align-top">
-                <td className="px-3 py-2">{customer.display_name}</td>
+                <td className="px-3 py-2">
+                  <Link href={`/admin/customers/${customer.id}`} className="underline">
+                    {customer.display_name}
+                  </Link>
+                </td>
                 <td className="px-3 py-2 text-neutral-600">{customer.phone ?? "—"}</td>
                 <td className="px-3 py-2 text-neutral-600 max-w-sm">{customer.address}</td>
                 <td className="px-3 py-2">
