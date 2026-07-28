@@ -54,18 +54,21 @@ export function PackingOrderCard({
     setLineStates((prev) => ({ ...prev, [lineId]: { ...prev[lineId], ...patch } }));
   }
 
-  const allResolved = order.lines.every((line) => lineStates[line.id]?.resolution !== "pending");
-  const packedQtysValid = order.lines.every((line) => {
+  const pendingLines = order.lines.filter((line) => lineStates[line.id]?.resolution === "pending");
+  const invalidPackedLines = order.lines.filter((line) => {
     const state = lineStates[line.id];
-    if (state.resolution !== "packed") return true;
-    return Number(state.actualQty) > 0;
+    return state.resolution === "packed" && !(Number(state.actualQty) > 0);
   });
-  const substituteInputsValid = order.lines.every((line) => {
+  const invalidSubstituteLines = order.lines.filter((line) => {
     const state = lineStates[line.id];
-    if (state.resolution !== "unavailable" || !state.addSubstitute) return true;
-    return state.substituteProductId !== "" && Number(state.substituteQty) > 0;
+    return (
+      state.resolution === "unavailable" &&
+      state.addSubstitute &&
+      !(state.substituteProductId !== "" && Number(state.substituteQty) > 0)
+    );
   });
-  const canFinalize = allResolved && packedQtysValid && substituteInputsValid;
+  const canFinalize =
+    pendingLines.length === 0 && invalidPackedLines.length === 0 && invalidSubstituteLines.length === 0;
 
   function handleFinalize() {
     setError(null);
@@ -191,6 +194,26 @@ export function PackingOrderCard({
       </div>
 
       {error && <p className="text-sm text-red-600">{error}</p>}
+      {!canFinalize && (
+        <div className="text-sm text-red-600 space-y-0.5">
+          {pendingLines.length > 0 && (
+            <p>
+              {pendingLines.length} line{pendingLines.length === 1 ? "" : "s"} still need Packed or Unavailable:{" "}
+              {pendingLines.map((l) => l.productName).join(", ")}
+            </p>
+          )}
+          {invalidPackedLines.length > 0 && (
+            <p>
+              Enter a quantity greater than zero for: {invalidPackedLines.map((l) => l.productName).join(", ")}
+            </p>
+          )}
+          {invalidSubstituteLines.length > 0 && (
+            <p>
+              Finish the substitute (product + qty) for: {invalidSubstituteLines.map((l) => l.productName).join(", ")}
+            </p>
+          )}
+        </div>
+      )}
 
       <button
         type="button"
