@@ -74,14 +74,14 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
     }
   }
   if (newlyResolvedByLineId.size > 0) {
-    for (const [lineId, pricePerUnit] of newlyResolvedByLineId) {
-      const { error } = await supabase
-        .from("order_lines")
-        .update({ locked_price_per_unit: pricePerUnit })
-        .eq("id", lineId);
-      if (error) {
-        return { ok: false, reason: "error", error: error.message };
-      }
+    const results = await Promise.all(
+      [...newlyResolvedByLineId].map(([lineId, pricePerUnit]) =>
+        supabase.from("order_lines").update({ locked_price_per_unit: pricePerUnit }).eq("id", lineId),
+      ),
+    );
+    const firstError = results.find((r) => r.error);
+    if (firstError?.error) {
+      return { ok: false, reason: "error", error: firstError.error.message };
     }
   }
 

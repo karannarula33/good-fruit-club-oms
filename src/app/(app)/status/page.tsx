@@ -2,6 +2,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { compareByZone, type Zone } from "@/lib/customers/zone";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
+import { PageHeader } from "@/components/ui/page-header";
 import { StatusBoardRealtime } from "./status-board-realtime";
 
 export default async function StatusBoardPage() {
@@ -31,12 +32,7 @@ export default async function StatusBoardPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Status board</h1>
-        <p className="text-sm text-neutral-600">
-          {profile.full_name || profile.phone} · today&apos;s orders, live
-        </p>
-      </div>
+      <PageHeader title="Status board" subtitle="Today's orders, live" />
       <StatusBoardRealtime initialOrders={rows} today={today} isAdmin={profile.role === "admin"} />
     </div>
   );

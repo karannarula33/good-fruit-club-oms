@@ -1,11 +1,11 @@
-import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
+import { PageHeader } from "@/components/ui/page-header";
 import { PackingOrderCard } from "./packing-order-card";
 
 export default async function PackerPage() {
-  const profile = await requireRole(["packer", "admin"]);
+  await requireRole(["packer", "admin"]);
 
   const supabase = await createClient();
   const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
@@ -82,16 +82,10 @@ export default async function PackerPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Packing</h1>
-        <p className="text-sm text-neutral-600">
-          {profile.full_name || profile.phone} · {packingOrders.length} order
-          {packingOrders.length === 1 ? "" : "s"} to pack today
-        </p>
-        <Link href="/status" className="text-sm underline text-neutral-900">
-          Status board
-        </Link>
-      </div>
+      <PageHeader
+        title="Packing"
+        subtitle={`${packingOrders.length} order${packingOrders.length === 1 ? "" : "s"} to pack today`}
+      />
 
       {packingOrders.length === 0 && <p className="text-neutral-500">Nothing to pack right now.</p>}
 

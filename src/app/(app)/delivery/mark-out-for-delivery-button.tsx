@@ -2,14 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Truck } from "lucide-react";
 import { markOutForDelivery } from "@/app/actions/delivery";
+import { Button } from "@/components/ui/button";
+import { FormError } from "@/components/ui/form-error";
 
 export function MarkOutForDeliveryButton({
   selectedIds,
   onMarked,
+  onOptimisticMark,
 }: {
   selectedIds: string[];
   onMarked: () => void;
+  onOptimisticMark: (ids: string[]) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -17,8 +22,10 @@ export function MarkOutForDeliveryButton({
 
   function handleClick() {
     setError(null);
+    const ids = selectedIds;
     startTransition(async () => {
-      const result = await markOutForDelivery(selectedIds);
+      onOptimisticMark(ids);
+      const result = await markOutForDelivery(ids);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -30,17 +37,19 @@ export function MarkOutForDeliveryButton({
 
   return (
     <div className="space-y-1">
-      <button
-        type="button"
+      <Button
+        variant="primary"
+        size="lg"
+        fullWidth
         onClick={handleClick}
-        disabled={pending || selectedIds.length === 0}
-        className="w-full rounded-md bg-neutral-900 px-4 py-3 text-lg text-white disabled:opacity-50"
+        disabled={selectedIds.length === 0}
+        pending={pending}
+        pendingText="Marking…"
       >
-        {pending
-          ? "Marking…"
-          : `Mark selected out for delivery${selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}`}
-      </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+        <Truck className="size-5" aria-hidden="true" />
+        Mark selected out for delivery{selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
+      </Button>
+      {error && <FormError>{error}</FormError>}
     </div>
   );
 }

@@ -3,6 +3,29 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  --brand: #166534;
+  --brand-hover: #14532d;
+  --brand-foreground: #ffffff;
+
+  --success: #16a34a;
+  --success-bg: #dcfce7;
+  --success-text: #166534;
+
+  --warning: #d97706;
+  --warning-bg: #fef3c7;
+  --warning-text: #92400e;
+
+  --danger: #dc2626;
+  --danger-bg: #fee2e2;
+  --danger-text: #991b1b;
+
+  --info: #2563eb;
+  --info-bg: #dbeafe;
+  --info-text: #1e40af;
+
+  --neutral-bg: #f5f5f5;
+  --neutral-text: #404040;
 }
 
 @theme inline {
@@ -10,17 +33,59 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  --color-brand: var(--brand);
+  --color-brand-hover: var(--brand-hover);
+  --color-brand-foreground: var(--brand-foreground);
+
+  --color-success: var(--success);
+  --color-success-bg: var(--success-bg);
+  --color-success-text: var(--success-text);
+
+  --color-warning: var(--warning);
+  --color-warning-bg: var(--warning-bg);
+  --color-warning-text: var(--warning-text);
+
+  --color-danger: var(--danger);
+  --color-danger-bg: var(--danger-bg);
+  --color-danger-text: var(--danger-text);
+
+  --color-info: var(--info);
+  --color-info-bg: var(--info-bg);
+  --color-info-text: var(--info-text);
+
+  --color-neutral-bg: var(--neutral-bg);
+  --color-neutral-text: var(--neutral-text);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
+
+    --brand: #22c55e;
+    --brand-hover: #16a34a;
+    --brand-foreground: #052e16;
+
+    --success-bg: #052e16;
+    --success-text: #4ade80;
+
+    --warning-bg: #451a03;
+    --warning-text: #fbbf24;
+
+    --danger-bg: #450a0a;
+    --danger-text: #f87171;
+
+    --info-bg: #172554;
+    --info-text: #60a5fa;
+
+    --neutral-bg: #262626;
+    --neutral-text: #d4d4d4;
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }

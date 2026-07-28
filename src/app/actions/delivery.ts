@@ -9,9 +9,10 @@ import type { LedgerMode } from "@/lib/supabase/database.types";
 
 // CLAUDE.md §7: "mark out_for_delivery (batch)" -- scoped to whichever
 // stops the delivery person has selected, not automatically every
-// dispatched order. Same sequential read-modify-write pattern as
-// dispatchPackedOrders/finalizeOrder; re-filtering by delivery_date/status
-// server-side guards against a stale selection.
+// dispatched order. Read-modify-write per order, writes run in parallel
+// (Promise.all) same as dispatchPackedOrders -- see that file's comment.
+// Re-filtering by delivery_date/status server-side guards against a stale
+// selection.
 export async function markOutForDelivery(
   orderIds: string[],
 ): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
@@ -36,18 +37,21 @@ export async function markOutForDelivery(
   }
 
   const now = new Date().toISOString();
-  for (const order of orders) {
-    const mergedStatusTimestamps = {
-      ...(order.status_timestamps as Record<string, string>),
-      out_for_delivery: now,
-    };
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: "out_for_delivery", status_timestamps: mergedStatusTimestamps })
-      .eq("id", order.id);
-    if (error) {
-      return { ok: false, error: error.message };
-    }
+  const results = await Promise.all(
+    orders.map((order) => {
+      const mergedStatusTimestamps = {
+        ...(order.status_timestamps as Record<string, string>),
+        out_for_delivery: now,
+      };
+      return supabase
+        .from("orders")
+        .update({ status: "out_for_delivery", status_timestamps: mergedStatusTimestamps })
+        .eq("id", order.id);
+    }),
+  );
+  const firstError = results.find((r) => r.error);
+  if (firstError?.error) {
+    return { ok: false, error: firstError.error.message };
   }
 
   revalidatePath("/delivery");

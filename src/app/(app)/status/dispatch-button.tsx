@@ -2,14 +2,18 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Truck } from "lucide-react";
 import { dispatchPackedOrders } from "@/app/actions/dispatch";
+import { Button } from "@/components/ui/button";
 
 export function DispatchButton({
   selectedIds,
   onDispatched,
+  onOptimisticDispatch,
 }: {
   selectedIds: string[];
   onDispatched: () => void;
+  onOptimisticDispatch: (ids: string[]) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -17,8 +21,10 @@ export function DispatchButton({
 
   function handleClick() {
     setMessage(null);
+    const ids = selectedIds;
     startTransition(async () => {
-      const result = await dispatchPackedOrders(selectedIds);
+      onOptimisticDispatch(ids);
+      const result = await dispatchPackedOrders(ids);
       if (!result.ok) {
         setMessage(result.error);
         return;
@@ -31,15 +37,19 @@ export function DispatchButton({
 
   return (
     <span className="inline-flex items-center gap-2">
-      <button
-        type="button"
+      <Button
+        variant="primary"
+        size="sm"
+        pill
         onClick={handleClick}
-        disabled={pending || selectedIds.length === 0}
-        className="rounded-full bg-neutral-900 px-3 py-1 text-sm font-medium text-white disabled:opacity-50"
+        disabled={selectedIds.length === 0}
+        pending={pending}
+        pendingText="Dispatching…"
       >
-        {pending ? "Dispatching…" : `Dispatch selected${selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}`}
-      </button>
-      {message && <span className="text-xs text-neutral-600">{message}</span>}
+        <Truck className="size-4" aria-hidden="true" />
+        Dispatch selected{selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
+      </Button>
+      {message && <span className="text-xs text-neutral-600 dark:text-neutral-400">{message}</span>}
     </span>
   );
 }

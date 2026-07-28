@@ -2,8 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { PhoneCall, MapPin } from "lucide-react";
 import { deliverOrder } from "@/app/actions/delivery";
 import { toE164 } from "@/lib/phone";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { FormError } from "@/components/ui/form-error";
+import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/orders/status-display";
 import type { LedgerMode, OrderStatus } from "@/lib/supabase/database.types";
 
 interface Stop {
@@ -17,25 +25,18 @@ interface Stop {
   netDue: number | null;
 }
 
-const STATUS_LABEL: Record<OrderStatus, string> = {
-  recorded: "Recorded",
-  packed: "Packed",
-  dispatched: "Dispatched",
-  out_for_delivery: "Out for delivery",
-  delivered: "Delivered",
-  cancelled: "Cancelled",
-};
-
 export function DeliveryStopCard({
   stop,
   selectable = false,
   checked = false,
   onToggle,
+  onOptimisticDeliver,
 }: {
   stop: Stop;
   selectable?: boolean;
   checked?: boolean;
   onToggle?: (checked: boolean) => void;
+  onOptimisticDeliver?: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -48,6 +49,7 @@ export function DeliveryStopCard({
     const amountNumber = Number(amount);
     const payment = amountNumber > 0 ? { amount: amountNumber, mode } : null;
     startTransition(async () => {
+      onOptimisticDeliver?.();
       const result = await deliverOrder(stop.id, payment);
       if (!result.ok) {
         setError(result.error);
@@ -60,6 +62,7 @@ export function DeliveryStopCard({
   function handleSkipPayment() {
     setError(null);
     startTransition(async () => {
+      onOptimisticDeliver?.();
       const result = await deliverOrder(stop.id, null);
       if (!result.ok) {
         setError(result.error);
@@ -70,7 +73,7 @@ export function DeliveryStopCard({
   }
 
   return (
-    <div className="rounded-lg border border-neutral-300 p-4 space-y-3">
+    <Card>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
           {selectable && (
@@ -78,24 +81,30 @@ export function DeliveryStopCard({
               type="checkbox"
               checked={checked}
               onChange={(e) => onToggle?.(e.target.checked)}
-              className="mt-1.5"
+              className="mt-1.5 size-4"
             />
           )}
           <div>
             <h2 className="text-lg font-semibold">{stop.customerName}</h2>
-            <p className="text-sm text-neutral-600">{stop.zone}</p>
-            <p className="text-sm text-neutral-600">{stop.address}</p>
+            <p className="flex items-center gap-1 text-sm text-neutral-600 dark:text-neutral-400">
+              <MapPin className="size-3.5" aria-hidden="true" />
+              {stop.zone} · {stop.address}
+            </p>
           </div>
         </div>
-        <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-700">
-          {STATUS_LABEL[stop.status]}
-        </span>
+        <Badge tone={ORDER_STATUS_TONE[stop.status]} size="sm" className="shrink-0">
+          {ORDER_STATUS_LABEL[stop.status]}
+        </Badge>
       </div>
 
       <div className="flex items-center gap-3 text-sm">
         {stop.phone ? (
-          <a href={`tel:${toE164(stop.phone)}`} className="rounded-md bg-neutral-100 px-3 py-2 font-medium">
-            Call {stop.phone}
+          <a
+            href={`tel:${toE164(stop.phone)}`}
+            className="inline-flex items-center gap-1.5 rounded-md bg-neutral-bg px-3 py-2 font-medium"
+          >
+            <PhoneCall className="size-4" aria-hidden="true" />
+            {stop.phone}
           </a>
         ) : (
           <span className="text-neutral-500">No phone on file</span>
@@ -108,16 +117,18 @@ export function DeliveryStopCard({
             Bill: ₹{stop.billTotal.toFixed(2)} · Net due: ₹{(stop.netDue ?? 0).toFixed(2)}
           </p>
         ) : (
-          <p className="text-red-600">Not billed yet</p>
+          <FormError>Not billed yet</FormError>
         )}
       </div>
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <FormError>{error}</FormError>}
 
       {stop.status === "out_for_delivery" && (
-        <div className="space-y-2 border-t border-neutral-200 pt-3">
+        <div className="space-y-2 border-t border-neutral-200 dark:border-neutral-800 pt-3">
           <div className="flex gap-2">
-            <input
+            <Input
+              size="lg"
+              className="flex-1"
               type="number"
               inputMode="decimal"
               step="0.01"
@@ -125,38 +136,23 @@ export function DeliveryStopCard({
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="Amount collected"
-              className="flex-1 rounded-md border border-neutral-300 px-3 py-3 text-lg"
             />
-            <select
-              value={mode}
-              onChange={(e) => setMode(e.target.value as LedgerMode)}
-              className="rounded-md border border-neutral-300 px-2 py-2 text-sm"
-            >
+            <Select value={mode} onChange={(e) => setMode(e.target.value as LedgerMode)}>
               <option value="cash">Cash</option>
               <option value="upi">UPI</option>
               <option value="other">Other</option>
-            </select>
+            </Select>
           </div>
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleMarkDelivered}
-              disabled={pending}
-              className="flex-1 rounded-md bg-neutral-900 px-4 py-3 text-lg text-white disabled:opacity-50"
-            >
-              {pending ? "Saving…" : "Mark delivered"}
-            </button>
-            <button
-              type="button"
-              onClick={handleSkipPayment}
-              disabled={pending}
-              className="rounded-md bg-neutral-100 px-4 py-3 text-sm text-neutral-700 disabled:opacity-50"
-            >
+            <Button variant="primary" size="lg" fullWidth onClick={handleMarkDelivered} pending={pending} pendingText="Saving…">
+              Mark delivered
+            </Button>
+            <Button variant="secondary" size="lg" onClick={handleSkipPayment} disabled={pending}>
               Skip (pay later)
-            </button>
+            </Button>
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

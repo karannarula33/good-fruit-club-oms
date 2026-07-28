@@ -53,14 +53,19 @@ export async function finalizeOrder(
   const now = new Date();
   const plan = buildFinalizeOrderPlan({ resolutions, substitutions, priceItems, now });
 
-  for (const update of plan.lineUpdates) {
-    const { error } = await supabase
-      .from("order_lines")
-      .update({ line_status: update.lineStatus, actual_qty: update.actualQty })
-      .eq("id", update.lineId);
-    if (error) {
-      return { ok: false, error: error.message };
-    }
+  // Each line is an independent row -- run the writes in parallel rather
+  // than one sequential round trip per line.
+  const lineUpdateResults = await Promise.all(
+    plan.lineUpdates.map((update) =>
+      supabase
+        .from("order_lines")
+        .update({ line_status: update.lineStatus, actual_qty: update.actualQty })
+        .eq("id", update.lineId),
+    ),
+  );
+  const firstLineUpdateError = lineUpdateResults.find((r) => r.error);
+  if (firstLineUpdateError?.error) {
+    return { ok: false, error: firstLineUpdateError.error.message };
   }
 
   if (plan.newSubstitutionLines.length > 0) {

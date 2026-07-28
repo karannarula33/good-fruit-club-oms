@@ -2,9 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { PackageCheck, Ban, MessageCircle } from "lucide-react";
 import { finalizeOrder } from "@/app/actions/packing";
 import { generateBill } from "@/app/actions/bills";
 import { toWhatsAppDigits } from "@/lib/phone";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { FormError } from "@/components/ui/form-error";
+import { cn } from "@/lib/cn";
 import type { UnitType } from "@/lib/supabase/database.types";
 
 interface LineForPacking {
@@ -124,108 +131,109 @@ export function PackingOrderCard({
   }
 
   return (
-    <div className="rounded-lg border border-neutral-300 p-4 space-y-4">
+    <Card className="space-y-4">
       <div>
         <h2 className="text-lg font-semibold">{order.customerName}</h2>
-        <p className="text-sm text-neutral-600">{order.zone}</p>
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">{order.zone}</p>
       </div>
 
       {stage === "packing" && (
-      <div className="space-y-3">
-        {order.lines.map((line) => {
-          const state = lineStates[line.id];
-          return (
-            <div key={line.id} className="border-t border-neutral-200 pt-3 space-y-2">
-              <div>
-                <p className="font-medium">{line.productName}</p>
-                <p className="text-sm text-neutral-600">
-                  Ordered: {line.orderedQty ?? "—"} {line.orderedUnit ?? line.unitLabel ?? ""}
-                </p>
-              </div>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => updateLine(line.id, { resolution: "packed" })}
-                  className={`flex-1 rounded-md px-3 py-3 text-sm font-medium ${
-                    state.resolution === "packed" ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-700"
-                  }`}
-                >
-                  Packed
-                </button>
-                <button
-                  type="button"
-                  onClick={() => updateLine(line.id, { resolution: "unavailable" })}
-                  className={`flex-1 rounded-md px-3 py-3 text-sm font-medium ${
-                    state.resolution === "unavailable" ? "bg-red-700 text-white" : "bg-neutral-100 text-neutral-700"
-                  }`}
-                >
-                  Unavailable
-                </button>
-              </div>
-
-              {state.resolution === "packed" && (
-                <input
-                  type="number"
-                  inputMode={line.unitType === "weight" ? "decimal" : "numeric"}
-                  step={line.unitType === "weight" ? "0.001" : "1"}
-                  min="0"
-                  placeholder={`Actual ${line.unitLabel ?? ""}`}
-                  value={state.actualQty}
-                  onChange={(e) => updateLine(line.id, { actualQty: e.target.value })}
-                  className="w-full rounded-md border border-neutral-300 px-3 py-3 text-lg"
-                />
-              )}
-
-              {state.resolution === "unavailable" && (
-                <div className="space-y-2">
-                  <label className="flex items-center gap-2 text-sm text-neutral-600">
-                    <input
-                      type="checkbox"
-                      checked={state.addSubstitute}
-                      onChange={(e) => updateLine(line.id, { addSubstitute: e.target.checked })}
-                    />
-                    Add substitute
-                  </label>
-                  {state.addSubstitute && (
-                    <div className="flex gap-2">
-                      <select
-                        value={state.substituteProductId}
-                        onChange={(e) => updateLine(line.id, { substituteProductId: e.target.value })}
-                        className="flex-1 rounded-md border border-neutral-300 px-2 py-2 text-sm"
-                      >
-                        <option value="">Select product…</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        type="number"
-                        step="0.001"
-                        min="0"
-                        placeholder="Qty"
-                        value={state.substituteQty}
-                        onChange={(e) => updateLine(line.id, { substituteQty: e.target.value })}
-                        className="w-24 rounded-md border border-neutral-300 px-2 py-2 text-sm"
-                      />
-                    </div>
-                  )}
+        <div className="space-y-3">
+          {order.lines.map((line) => {
+            const state = lineStates[line.id];
+            return (
+              <div key={line.id} className="border-t border-neutral-200 dark:border-neutral-800 pt-3 space-y-2">
+                <div>
+                  <p className="font-medium">{line.productName}</p>
+                  <p className="text-sm text-neutral-600 dark:text-neutral-400">
+                    Ordered: {line.orderedQty ?? "—"} {line.orderedUnit ?? line.unitLabel ?? ""}
+                  </p>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+
+                <div className="flex gap-2">
+                  <Button
+                    variant={state.resolution === "packed" ? "primary" : "secondary"}
+                    size="lg"
+                    fullWidth
+                    onClick={() => updateLine(line.id, { resolution: "packed" })}
+                  >
+                    <PackageCheck className="size-4" aria-hidden="true" />
+                    Packed
+                  </Button>
+                  <Button
+                    variant={state.resolution === "unavailable" ? "destructive" : "secondary"}
+                    size="lg"
+                    fullWidth
+                    onClick={() => updateLine(line.id, { resolution: "unavailable" })}
+                  >
+                    <Ban className="size-4" aria-hidden="true" />
+                    Unavailable
+                  </Button>
+                </div>
+
+                {state.resolution === "packed" && (
+                  <Input
+                    size="lg"
+                    type="number"
+                    inputMode={line.unitType === "weight" ? "decimal" : "numeric"}
+                    step={line.unitType === "weight" ? "0.001" : "1"}
+                    min="0"
+                    placeholder={`Actual ${line.unitLabel ?? ""}`}
+                    value={state.actualQty}
+                    onChange={(e) => updateLine(line.id, { actualQty: e.target.value })}
+                    className="w-full"
+                  />
+                )}
+
+                {state.resolution === "unavailable" && (
+                  <div className="space-y-2">
+                    <label className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+                      <input
+                        type="checkbox"
+                        checked={state.addSubstitute}
+                        onChange={(e) => updateLine(line.id, { addSubstitute: e.target.checked })}
+                      />
+                      Add substitute
+                    </label>
+                    {state.addSubstitute && (
+                      <div className="flex gap-2">
+                        <Select
+                          className="flex-1"
+                          value={state.substituteProductId}
+                          onChange={(e) => updateLine(line.id, { substituteProductId: e.target.value })}
+                        >
+                          <option value="">Select product…</option>
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </Select>
+                        <Input
+                          className="w-24"
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          placeholder="Qty"
+                          value={state.substituteQty}
+                          onChange={(e) => updateLine(line.id, { substituteQty: e.target.value })}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <FormError>{error}</FormError>}
 
       {stage === "packing" && (
         <>
           {!canFinalize && (
-            <div className="text-sm text-red-600 space-y-0.5">
+            <div className="text-sm text-danger-text space-y-0.5">
               {pendingLines.length > 0 && (
                 <p>
                   {pendingLines.length} line{pendingLines.length === 1 ? "" : "s"} still need Packed or Unavailable:{" "}
@@ -246,58 +254,56 @@ export function PackingOrderCard({
             </div>
           )}
 
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="lg"
+            fullWidth
             onClick={handleFinalize}
-            disabled={pending || !canFinalize}
-            className="w-full rounded-md bg-neutral-900 px-4 py-3 text-lg text-white disabled:opacity-50"
+            disabled={!canFinalize}
+            pending={pending}
+            pendingText="Finalizing…"
           >
-            {pending ? "Finalizing..." : "Finalize order"}
-          </button>
+            Finalize order
+          </Button>
         </>
       )}
 
       {stage === "bill-blocked" && (
         <div className="space-y-3">
-          <p className="text-sm text-red-600">
+          <p className="text-sm text-danger-text">
             Order packed, but the bill couldn&apos;t be generated: {unpricedLineCount} item
             {unpricedLineCount === 1 ? "" : "s"} still need a price. Ask admin to price them in Prices, then retry.
           </p>
-          <button
-            type="button"
-            onClick={handleRetryBill}
-            disabled={pending}
-            className="w-full rounded-md bg-neutral-900 px-4 py-3 text-lg text-white disabled:opacity-50"
-          >
-            {pending ? "Retrying..." : "Retry generating bill"}
-          </button>
+          <Button variant="primary" size="lg" fullWidth onClick={handleRetryBill} pending={pending} pendingText="Retrying…">
+            Retry generating bill
+          </Button>
         </div>
       )}
 
       {stage === "billed" && bill && (
         <div className="space-y-3">
-          <p className="text-sm text-neutral-700">Order packed and billed.</p>
+          <p className="text-sm text-neutral-700 dark:text-neutral-300">Order packed and billed.</p>
           {bill.customerPhone ? (
             <a
               href={`https://wa.me/${toWhatsAppDigits(bill.customerPhone)}?text=${encodeURIComponent(bill.messageText)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="block w-full rounded-md bg-green-700 px-4 py-3 text-center text-lg text-white"
+              className={cn(
+                "flex items-center justify-center gap-2 w-full rounded-md px-4 py-3 text-lg font-medium text-white",
+                "bg-success hover:brightness-95",
+              )}
             >
+              <MessageCircle className="size-5" aria-hidden="true" />
               Send bill on WhatsApp
             </a>
           ) : (
-            <p className="text-sm text-red-600">No phone number on file for this customer — send the bill manually.</p>
+            <FormError>No phone number on file for this customer — send the bill manually.</FormError>
           )}
-          <button
-            type="button"
-            onClick={() => router.refresh()}
-            className="w-full rounded-md bg-neutral-100 px-4 py-3 text-lg text-neutral-700"
-          >
+          <Button variant="secondary" size="lg" fullWidth onClick={() => router.refresh()}>
             Done
-          </button>
+          </Button>
         </div>
       )}
-    </div>
+    </Card>
   );
 }

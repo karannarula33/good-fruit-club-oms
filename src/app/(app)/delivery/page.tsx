@@ -1,13 +1,13 @@
-import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { compareByZone, type Zone } from "@/lib/customers/zone";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
+import { PageHeader } from "@/components/ui/page-header";
 import { DeliveryStopsBoard } from "./delivery-stops-board";
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
 export default async function DeliveryPage() {
-  const profile = await requireRole(["delivery", "admin"]);
+  await requireRole(["delivery", "admin"]);
 
   const supabase = await createClient();
   const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
@@ -48,16 +48,7 @@ export default async function DeliveryPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Delivery route</h1>
-        <p className="text-sm text-neutral-600">
-          {profile.full_name || profile.phone} · {stops.length} stop{stops.length === 1 ? "" : "s"} today
-        </p>
-        <Link href="/status" className="text-sm underline text-neutral-900">
-          Status board
-        </Link>
-      </div>
-
+      <PageHeader title="Delivery route" subtitle={`${stops.length} stop${stops.length === 1 ? "" : "s"} today`} />
       <DeliveryStopsBoard stops={stops} />
     </div>
   );

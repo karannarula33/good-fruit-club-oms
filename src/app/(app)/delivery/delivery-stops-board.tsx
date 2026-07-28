@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useOptimistic, useState } from "react";
 import { DeliveryStopCard } from "./delivery-stop-card";
 import { MarkOutForDeliveryButton } from "./mark-out-for-delivery-button";
 import type { OrderStatus } from "@/lib/supabase/database.types";
@@ -18,6 +18,11 @@ interface Stop {
 
 export function DeliveryStopsBoard({ stops }: { stops: Stop[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [optimisticStops, setOptimisticStatus] = useOptimistic(
+    stops,
+    (state, update: { ids: string[]; status: OrderStatus }) =>
+      state.map((s) => (update.ids.includes(s.id) ? { ...s, status: update.status } : s)),
+  );
 
   function toggle(orderId: string, checked: boolean) {
     setSelected((prev) => {
@@ -28,7 +33,7 @@ export function DeliveryStopsBoard({ stops }: { stops: Stop[] }) {
     });
   }
 
-  const dispatchedCount = stops.filter((s) => s.status === "dispatched").length;
+  const dispatchedCount = optimisticStops.filter((s) => s.status === "dispatched").length;
 
   return (
     <div className="space-y-4">
@@ -36,19 +41,21 @@ export function DeliveryStopsBoard({ stops }: { stops: Stop[] }) {
         <MarkOutForDeliveryButton
           selectedIds={[...selected]}
           onMarked={() => setSelected(new Set())}
+          onOptimisticMark={(ids) => setOptimisticStatus({ ids, status: "out_for_delivery" })}
         />
       )}
 
-      {stops.length === 0 && <p className="text-neutral-500">Nothing dispatched yet.</p>}
+      {optimisticStops.length === 0 && <p className="text-neutral-500">Nothing dispatched yet.</p>}
 
       <div className="space-y-4">
-        {stops.map((stop) => (
+        {optimisticStops.map((stop) => (
           <DeliveryStopCard
             key={stop.id}
             stop={stop}
             selectable={stop.status === "dispatched"}
             checked={selected.has(stop.id)}
             onToggle={(checked) => toggle(stop.id, checked)}
+            onOptimisticDeliver={() => setOptimisticStatus({ ids: [stop.id], status: "delivered" })}
           />
         ))}
       </div>

@@ -8,8 +8,10 @@ import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 // CLAUDE.md §3.5: "dispatched ... flipped as a batch action ('dispatch
 // today's packed orders')" -- scoped to whichever orders the admin has
 // selected on the status board, not automatically every packed order.
-// Sequential read-modify-write per order (not a raw SQL jsonb merge) --
-// same style as finalizeOrder/markListSent. Re-filtering by
+// Read-modify-write per order (not a raw SQL jsonb merge), but the writes
+// themselves run in parallel (Promise.all) since each order is an
+// independent row -- N sequential round trips would otherwise dominate
+// perceived latency for a multi-order dispatch. Re-filtering by
 // delivery_date/status server-side (rather than trusting the selection
 // as-is) guards against a stale selection racing another dispatch.
 export async function dispatchPackedOrders(
@@ -36,18 +38,21 @@ export async function dispatchPackedOrders(
   }
 
   const now = new Date().toISOString();
-  for (const order of orders) {
-    const mergedStatusTimestamps = {
-      ...(order.status_timestamps as Record<string, string>),
-      dispatched: now,
-    };
-    const { error } = await supabase
-      .from("orders")
-      .update({ status: "dispatched", status_timestamps: mergedStatusTimestamps })
-      .eq("id", order.id);
-    if (error) {
-      return { ok: false, error: error.message };
-    }
+  const results = await Promise.all(
+    orders.map((order) => {
+      const mergedStatusTimestamps = {
+        ...(order.status_timestamps as Record<string, string>),
+        dispatched: now,
+      };
+      return supabase
+        .from("orders")
+        .update({ status: "dispatched", status_timestamps: mergedStatusTimestamps })
+        .eq("id", order.id);
+    }),
+  );
+  const firstError = results.find((r) => r.error);
+  if (firstError?.error) {
+    return { ok: false, error: firstError.error.message };
   }
 
   revalidatePath("/status");
