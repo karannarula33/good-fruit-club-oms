@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { computeBillTotal, computeCustomerBalance, computeNetDue } from "@/lib/billing/compute";
@@ -121,6 +120,8 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
     return { ok: false, reason: "error", error: debitError.message };
   }
 
-  revalidatePath("/packer");
+  // No revalidatePath here on purpose -- see the matching note in
+  // src/app/actions/packing.ts. The packer needs the "Send bill" button
+  // to stay on screen until they explicitly tap "Done".
   return { ok: true, messageText, customerPhone: customer.phone };
 }

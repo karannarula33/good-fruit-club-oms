@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { loadPriceItemRecords } from "@/lib/pricing/load";
@@ -90,6 +89,11 @@ export async function finalizeOrder(
     return { ok: false, error: finalizeError.message };
   }
 
-  revalidatePath("/packer");
+  // No revalidatePath here on purpose -- it would auto-refresh the /packer
+  // page's server data as part of this action (Next.js does this even
+  // without an explicit router.refresh()), which would unmount this
+  // order's card the instant it's packed, before the packer can see the
+  // "Send bill" button generateBill produces next. The page only refreshes
+  // when the packer explicitly taps "Done" (see packing-order-card.tsx).
   return { ok: true };
 }
