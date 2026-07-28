@@ -26,7 +26,17 @@ const STATUS_LABEL: Record<OrderStatus, string> = {
   cancelled: "Cancelled",
 };
 
-export function DeliveryStopCard({ stop }: { stop: Stop }) {
+export function DeliveryStopCard({
+  stop,
+  selectable = false,
+  checked = false,
+  onToggle,
+}: {
+  stop: Stop;
+  selectable?: boolean;
+  checked?: boolean;
+  onToggle?: (checked: boolean) => void;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -62,10 +72,20 @@ export function DeliveryStopCard({ stop }: { stop: Stop }) {
   return (
     <div className="rounded-lg border border-neutral-300 p-4 space-y-3">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <h2 className="text-lg font-semibold">{stop.customerName}</h2>
-          <p className="text-sm text-neutral-600">{stop.zone}</p>
-          <p className="text-sm text-neutral-600">{stop.address}</p>
+        <div className="flex items-start gap-2">
+          {selectable && (
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => onToggle?.(e.target.checked)}
+              className="mt-1.5"
+            />
+          )}
+          <div>
+            <h2 className="text-lg font-semibold">{stop.customerName}</h2>
+            <p className="text-sm text-neutral-600">{stop.zone}</p>
+            <p className="text-sm text-neutral-600">{stop.address}</p>
+          </div>
         </div>
         <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-1 text-xs font-medium text-neutral-700">
           {STATUS_LABEL[stop.status]}

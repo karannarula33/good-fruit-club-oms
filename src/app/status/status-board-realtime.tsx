@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { formatIstDisplay } from "@/lib/time/ist";
@@ -52,6 +52,7 @@ export function StatusBoardRealtime({
   isAdmin: boolean;
 }) {
   const router = useRouter();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const supabase = createClient();
@@ -69,6 +70,15 @@ export function StatusBoardRealtime({
     };
   }, [today, router]);
 
+  function toggle(orderId: string, checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(orderId);
+      else next.delete(orderId);
+      return next;
+    });
+  }
+
   const counts = STATUS_ORDER.map((status) => ({
     status,
     count: initialOrders.filter((o) => o.status === status).length,
@@ -85,7 +95,9 @@ export function StatusBoardRealtime({
             {STATUS_LABEL[status]}: {count}
           </span>
         ))}
-        {isAdmin && <DispatchButton />}
+        {isAdmin && (
+          <DispatchButton selectedIds={[...selected]} onDispatched={() => setSelected(new Set())} />
+        )}
       </div>
 
       {initialOrders.length === 0 && <p className="text-neutral-500">No orders for today.</p>}
@@ -94,6 +106,7 @@ export function StatusBoardRealtime({
         <table className="min-w-full text-sm border border-neutral-300 rounded-md">
           <thead>
             <tr className="bg-neutral-100 text-left">
+              {isAdmin && <th className="px-3 py-2"></th>}
               <th className="px-3 py-2">Customer</th>
               <th className="px-3 py-2">Zone</th>
               <th className="px-3 py-2">Status</th>
@@ -103,8 +116,20 @@ export function StatusBoardRealtime({
           <tbody>
             {initialOrders.map((order) => {
               const since = order.statusTimestamps[order.status];
+              const dispatchable = order.status === "packed";
               return (
                 <tr key={order.id} className="border-t border-neutral-200">
+                  {isAdmin && (
+                    <td className="px-3 py-2">
+                      {dispatchable && (
+                        <input
+                          type="checkbox"
+                          checked={selected.has(order.id)}
+                          onChange={(e) => toggle(order.id, e.target.checked)}
+                        />
+                      )}
+                    </td>
+                  )}
                   <td className="px-3 py-2">{order.customerName}</td>
                   <td className="px-3 py-2 text-neutral-600">{order.zone}</td>
                   <td className="px-3 py-2">

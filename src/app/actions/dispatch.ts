@@ -6,12 +6,19 @@ import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 
 // CLAUDE.md §3.5: "dispatched ... flipped as a batch action ('dispatch
-// today's packed orders')". Sequential read-modify-write per order (not a
-// raw SQL jsonb merge) -- same style as finalizeOrder/markListSent.
-export async function dispatchPackedOrders(): Promise<
-  { ok: true; count: number } | { ok: false; error: string }
-> {
+// today's packed orders')" -- scoped to whichever orders the admin has
+// selected on the status board, not automatically every packed order.
+// Sequential read-modify-write per order (not a raw SQL jsonb merge) --
+// same style as finalizeOrder/markListSent. Re-filtering by
+// delivery_date/status server-side (rather than trusting the selection
+// as-is) guards against a stale selection racing another dispatch.
+export async function dispatchPackedOrders(
+  orderIds: string[],
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
   await requireRole(["admin"]);
+  if (orderIds.length === 0) {
+    return { ok: true, count: 0 };
+  }
   const supabase = await createClient();
   const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
@@ -19,7 +26,8 @@ export async function dispatchPackedOrders(): Promise<
     .from("orders")
     .select("id, status_timestamps")
     .eq("delivery_date", today)
-    .eq("status", "packed");
+    .eq("status", "packed")
+    .in("id", orderIds);
   if (loadError) {
     return { ok: false, error: loadError.message };
   }

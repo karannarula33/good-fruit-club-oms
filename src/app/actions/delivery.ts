@@ -7,12 +7,18 @@ import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { insertCredit } from "@/lib/billing/credit";
 import type { LedgerMode } from "@/lib/supabase/database.types";
 
-// CLAUDE.md §7: "mark out_for_delivery (batch)". Same sequential
-// read-modify-write pattern as dispatchPackedOrders/finalizeOrder.
-export async function markOutForDelivery(): Promise<
-  { ok: true; count: number } | { ok: false; error: string }
-> {
+// CLAUDE.md §7: "mark out_for_delivery (batch)" -- scoped to whichever
+// stops the delivery person has selected, not automatically every
+// dispatched order. Same sequential read-modify-write pattern as
+// dispatchPackedOrders/finalizeOrder; re-filtering by delivery_date/status
+// server-side guards against a stale selection.
+export async function markOutForDelivery(
+  orderIds: string[],
+): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
   await requireRole(["delivery", "admin"]);
+  if (orderIds.length === 0) {
+    return { ok: true, count: 0 };
+  }
   const supabase = await createClient();
   const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
@@ -20,7 +26,8 @@ export async function markOutForDelivery(): Promise<
     .from("orders")
     .select("id, status_timestamps")
     .eq("delivery_date", today)
-    .eq("status", "dispatched");
+    .eq("status", "dispatched")
+    .in("id", orderIds);
   if (loadError) {
     return { ok: false, error: loadError.message };
   }

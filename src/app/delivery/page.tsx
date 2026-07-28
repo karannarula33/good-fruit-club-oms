@@ -3,8 +3,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { compareByZone, type Zone } from "@/lib/customers/zone";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
-import { DeliveryStopCard } from "./delivery-stop-card";
-import { MarkOutForDeliveryButton } from "./mark-out-for-delivery-button";
+import { DeliveryStopsBoard } from "./delivery-stops-board";
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
 export default async function DeliveryPage() {
@@ -47,8 +46,6 @@ export default async function DeliveryPage() {
     })
     .sort((a, b) => compareByZone(a.zone, b.zone) || a.customerName.localeCompare(b.customerName));
 
-  const dispatchedCount = stops.filter((s) => s.status === "dispatched").length;
-
   return (
     <div className="p-4 space-y-4">
       <div>
@@ -61,15 +58,7 @@ export default async function DeliveryPage() {
         </Link>
       </div>
 
-      {dispatchedCount > 0 && <MarkOutForDeliveryButton />}
-
-      {stops.length === 0 && <p className="text-neutral-500">Nothing dispatched yet.</p>}
-
-      <div className="space-y-4">
-        {stops.map((stop) => (
-          <DeliveryStopCard key={stop.id} stop={stop} />
-        ))}
-      </div>
+      <DeliveryStopsBoard stops={stops} />
     </div>
   );
 }
