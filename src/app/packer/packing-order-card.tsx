@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { finalizeOrder } from "@/app/actions/packing";
+import { generateBill } from "@/app/actions/bills";
+import { toWhatsAppDigits } from "@/lib/phone";
 import type { UnitType } from "@/lib/supabase/database.types";
 
 interface LineForPacking {
@@ -49,6 +51,9 @@ export function PackingOrderCard({
   const [lineStates, setLineStates] = useState<Record<string, LineState>>(() =>
     Object.fromEntries(order.lines.map((line) => [line.id, initialLineState()])),
   );
+  const [stage, setStage] = useState<"packing" | "billed" | "bill-blocked">("packing");
+  const [bill, setBill] = useState<{ messageText: string; customerPhone: string | null } | null>(null);
+  const [unpricedLineCount, setUnpricedLineCount] = useState(0);
 
   function updateLine(lineId: string, patch: Partial<LineState>) {
     setLineStates((prev) => ({ ...prev, [lineId]: { ...prev[lineId], ...patch } }));
@@ -94,8 +99,28 @@ export function PackingOrderCard({
         setError(result.error);
         return;
       }
-      router.refresh();
+      await runGenerateBill();
     });
+  }
+
+  async function runGenerateBill() {
+    const billResult = await generateBill(order.id);
+    if (!billResult.ok) {
+      if (billResult.reason === "unpriced") {
+        setUnpricedLineCount(billResult.unpricedLineCount);
+        setStage("bill-blocked");
+      } else {
+        setError(billResult.error);
+      }
+      return;
+    }
+    setBill({ messageText: billResult.messageText, customerPhone: billResult.customerPhone });
+    setStage("billed");
+  }
+
+  function handleRetryBill() {
+    setError(null);
+    startTransition(runGenerateBill);
   }
 
   return (
@@ -105,6 +130,7 @@ export function PackingOrderCard({
         <p className="text-sm text-neutral-600">{order.zone}</p>
       </div>
 
+      {stage === "packing" && (
       <div className="space-y-3">
         {order.lines.map((line) => {
           const state = lineStates[line.id];
@@ -192,37 +218,86 @@ export function PackingOrderCard({
           );
         })}
       </div>
+      )}
 
       {error && <p className="text-sm text-red-600">{error}</p>}
-      {!canFinalize && (
-        <div className="text-sm text-red-600 space-y-0.5">
-          {pendingLines.length > 0 && (
-            <p>
-              {pendingLines.length} line{pendingLines.length === 1 ? "" : "s"} still need Packed or Unavailable:{" "}
-              {pendingLines.map((l) => l.productName).join(", ")}
-            </p>
+
+      {stage === "packing" && (
+        <>
+          {!canFinalize && (
+            <div className="text-sm text-red-600 space-y-0.5">
+              {pendingLines.length > 0 && (
+                <p>
+                  {pendingLines.length} line{pendingLines.length === 1 ? "" : "s"} still need Packed or Unavailable:{" "}
+                  {pendingLines.map((l) => l.productName).join(", ")}
+                </p>
+              )}
+              {invalidPackedLines.length > 0 && (
+                <p>
+                  Enter a quantity greater than zero for: {invalidPackedLines.map((l) => l.productName).join(", ")}
+                </p>
+              )}
+              {invalidSubstituteLines.length > 0 && (
+                <p>
+                  Finish the substitute (product + qty) for:{" "}
+                  {invalidSubstituteLines.map((l) => l.productName).join(", ")}
+                </p>
+              )}
+            </div>
           )}
-          {invalidPackedLines.length > 0 && (
-            <p>
-              Enter a quantity greater than zero for: {invalidPackedLines.map((l) => l.productName).join(", ")}
-            </p>
-          )}
-          {invalidSubstituteLines.length > 0 && (
-            <p>
-              Finish the substitute (product + qty) for: {invalidSubstituteLines.map((l) => l.productName).join(", ")}
-            </p>
-          )}
+
+          <button
+            type="button"
+            onClick={handleFinalize}
+            disabled={pending || !canFinalize}
+            className="w-full rounded-md bg-neutral-900 px-4 py-3 text-lg text-white disabled:opacity-50"
+          >
+            {pending ? "Finalizing..." : "Finalize order"}
+          </button>
+        </>
+      )}
+
+      {stage === "bill-blocked" && (
+        <div className="space-y-3">
+          <p className="text-sm text-red-600">
+            Order packed, but the bill couldn&apos;t be generated: {unpricedLineCount} item
+            {unpricedLineCount === 1 ? "" : "s"} still need a price. Ask admin to price them in Prices, then retry.
+          </p>
+          <button
+            type="button"
+            onClick={handleRetryBill}
+            disabled={pending}
+            className="w-full rounded-md bg-neutral-900 px-4 py-3 text-lg text-white disabled:opacity-50"
+          >
+            {pending ? "Retrying..." : "Retry generating bill"}
+          </button>
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={handleFinalize}
-        disabled={pending || !canFinalize}
-        className="w-full rounded-md bg-neutral-900 px-4 py-3 text-lg text-white disabled:opacity-50"
-      >
-        {pending ? "Finalizing..." : "Finalize order"}
-      </button>
+      {stage === "billed" && bill && (
+        <div className="space-y-3">
+          <p className="text-sm text-neutral-700">Order packed and billed.</p>
+          {bill.customerPhone ? (
+            <a
+              href={`https://wa.me/${toWhatsAppDigits(bill.customerPhone)}?text=${encodeURIComponent(bill.messageText)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block w-full rounded-md bg-green-700 px-4 py-3 text-center text-lg text-white"
+            >
+              Send bill on WhatsApp
+            </a>
+          ) : (
+            <p className="text-sm text-red-600">No phone number on file for this customer — send the bill manually.</p>
+          )}
+          <button
+            type="button"
+            onClick={() => router.refresh()}
+            className="w-full rounded-md bg-neutral-100 px-4 py-3 text-lg text-neutral-700"
+          >
+            Done
+          </button>
+        </div>
+      )}
     </div>
   );
 }

@@ -24,6 +24,8 @@ export type OrderStatus =
   | "cancelled";
 export type LineStatus = "pending" | "packed" | "unavailable";
 export type ParseConfidence = "clean" | "flagged";
+export type LedgerEntryType = "debit" | "credit";
+export type LedgerMode = "cash" | "upi" | "other";
 
 export interface Database {
   public: {
@@ -280,6 +282,96 @@ export interface Database {
           list_sent_at?: string;
           sent_by?: string | null;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      bills: {
+        Row: {
+          id: string;
+          order_id: string;
+          total: number;
+          prev_balance: number;
+          net_due: number;
+          message_text: string | null;
+          finalized_at: string | null;
+          finalized_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          total: number;
+          prev_balance: number;
+          net_due: number;
+          message_text?: string | null;
+          finalized_at?: string | null;
+          finalized_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          order_id?: string;
+          total?: number;
+          prev_balance?: number;
+          net_due?: number;
+          message_text?: string | null;
+          finalized_at?: string | null;
+          finalized_by?: string | null;
+        };
+        Relationships: [];
+      };
+      ledger_entries: {
+        Row: {
+          id: string;
+          customer_id: string;
+          entry_type: LedgerEntryType;
+          amount: number;
+          mode: LedgerMode | null;
+          order_id: string | null;
+          note: string | null;
+          entered_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          customer_id: string;
+          entry_type: LedgerEntryType;
+          amount: number;
+          mode?: LedgerMode | null;
+          order_id?: string | null;
+          note?: string | null;
+          entered_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          customer_id?: string;
+          entry_type?: LedgerEntryType;
+          amount?: number;
+          mode?: LedgerMode | null;
+          order_id?: string | null;
+          note?: string | null;
+          entered_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      payment_allocations: {
+        Row: {
+          id: string;
+          ledger_entry_id: string;
+          order_id: string;
+          amount: number;
+        };
+        Insert: {
+          id?: string;
+          ledger_entry_id: string;
+          order_id: string;
+          amount: number;
+        };
+        Update: {
+          id?: string;
+          ledger_entry_id?: string;
+          order_id?: string;
+          amount?: number;
         };
         Relationships: [];
       };

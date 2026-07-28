@@ -3,14 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-
-// India-only for phase 1 (Good Fruit Club serves Gurgaon).
-function toE164(phone: string) {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("91") && digits.length === 12) return `+${digits}`;
-  if (digits.length === 10) return `+91${digits}`;
-  return `+${digits}`;
-}
+import { toE164 } from "@/lib/phone";
 
 export default function LoginPage() {
   const router = useRouter();

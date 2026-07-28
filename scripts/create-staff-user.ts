@@ -5,17 +5,10 @@
 // Run with: npm run create:staff-user -- <phone> <password> "<full name>" <admin|packer|delivery>
 
 import { createServiceRoleClient } from "../src/lib/supabase/service-role";
+import { toE164 } from "../src/lib/phone";
 import type { Role } from "../src/lib/supabase/database.types";
 
 const VALID_ROLES: Role[] = ["admin", "packer", "delivery"];
-
-// Same convention as src/app/login/page.tsx's toE164 (India-only, phase 1).
-function toE164(phone: string): string {
-  const digits = phone.replace(/\D/g, "");
-  if (digits.startsWith("91") && digits.length === 12) return `+${digits}`;
-  if (digits.length === 10) return `+91${digits}`;
-  return `+${digits}`;
-}
 
 async function main() {
   const [phoneArg, password, fullName, role] = process.argv.slice(2);
