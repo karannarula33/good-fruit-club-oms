@@ -123,7 +123,7 @@ export function StatusBoardRealtime({
                   <TD>{order.customerName}</TD>
                   <TD className="text-neutral-600 dark:text-neutral-400">{order.zone}</TD>
                   <TD>
-                    <Badge tone={ORDER_STATUS_TONE[order.status]} size="sm">
+                    <Badge key={order.status} tone={ORDER_STATUS_TONE[order.status]} size="sm">
                       {ORDER_STATUS_LABEL[order.status]}
                     </Badge>
                   </TD>

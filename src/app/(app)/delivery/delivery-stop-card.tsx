@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { PhoneCall, MapPin } from "lucide-react";
+import { motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
+import { PhoneCall, MapPin, CheckCircle2, Clock } from "lucide-react";
 import { deliverOrder } from "@/app/actions/delivery";
 import { toE164 } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
@@ -25,6 +26,8 @@ interface Stop {
   netDue: number | null;
 }
 
+const SWIPE_THRESHOLD = 90;
+
 export function DeliveryStopCard({
   stop,
   selectable = false,
@@ -43,6 +46,10 @@ export function DeliveryStopCard({
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState(stop.netDue !== null ? String(stop.netDue) : "");
   const [mode, setMode] = useState<LedgerMode>("cash");
+
+  const x = useMotionValue(0);
+  const deliverOpacity = useTransform(x, [20, SWIPE_THRESHOLD], [0, 1]);
+  const skipOpacity = useTransform(x, [-SWIPE_THRESHOLD, -20], [1, 0]);
 
   function handleMarkDelivered() {
     setError(null);
@@ -72,8 +79,17 @@ export function DeliveryStopCard({
     });
   }
 
-  return (
-    <Card>
+  function handleSwipeEnd(_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
+    if (pending) return;
+    if (info.offset.x > SWIPE_THRESHOLD) {
+      handleMarkDelivered();
+    } else if (info.offset.x < -SWIPE_THRESHOLD) {
+      handleSkipPayment();
+    }
+  }
+
+  const cardContent = (
+    <>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-start gap-2">
           {selectable && (
@@ -92,7 +108,7 @@ export function DeliveryStopCard({
             </p>
           </div>
         </div>
-        <Badge tone={ORDER_STATUS_TONE[stop.status]} size="sm" className="shrink-0">
+        <Badge key={stop.status} tone={ORDER_STATUS_TONE[stop.status]} size="sm" className="shrink-0">
           {ORDER_STATUS_LABEL[stop.status]}
         </Badge>
       </div>
@@ -151,8 +167,42 @@ export function DeliveryStopCard({
               Skip (pay later)
             </Button>
           </div>
+          <p className="text-center text-xs text-neutral-500">Swipe right to deliver · swipe left to skip</p>
         </div>
       )}
-    </Card>
+    </>
+  );
+
+  if (stop.status !== "out_for_delivery") {
+    return <Card>{cardContent}</Card>;
+  }
+
+  return (
+    <div className="relative">
+      <motion.div
+        style={{ opacity: deliverOpacity }}
+        className="pointer-events-none absolute inset-0 flex items-center rounded-lg bg-success-bg pl-4 text-success-text"
+        aria-hidden="true"
+      >
+        <CheckCircle2 className="size-6" />
+      </motion.div>
+      <motion.div
+        style={{ opacity: skipOpacity }}
+        className="pointer-events-none absolute inset-0 flex items-center justify-end rounded-lg bg-warning-bg pr-4 text-warning-text"
+        aria-hidden="true"
+      >
+        <Clock className="size-6" />
+      </motion.div>
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: 0, right: 0 }}
+        dragElastic={0.4}
+        onDragEnd={handleSwipeEnd}
+        style={{ x }}
+        className="relative"
+      >
+        <Card>{cardContent}</Card>
+      </motion.div>
+    </div>
   );
 }

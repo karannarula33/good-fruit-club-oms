@@ -1,3 +1,6 @@
+"use client";
+
+import { motion } from "motion/react";
 import { cn } from "@/lib/cn";
 
 export function Table({ className, children }: { className?: string; children: React.ReactNode }) {
@@ -17,7 +20,16 @@ export function TBody({ children }: { children: React.ReactNode }) {
 }
 
 export function TR({ className, children }: { className?: string; children: React.ReactNode }) {
-  return <tr className={cn("border-t border-neutral-200 dark:border-neutral-800", className)}>{children}</tr>;
+  return (
+    <motion.tr
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.15 }}
+      className={cn("border-t border-neutral-200 dark:border-neutral-800", className)}
+    >
+      {children}
+    </motion.tr>
+  );
 }
 
 export function TH({ className, children }: { className?: string; children?: React.ReactNode }) {

@@ -1,6 +1,14 @@
+"use client";
+
 import Link from "next/link";
+import { motion } from "motion/react";
 import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
+
+const MotionLink = motion.create(Link);
+
+const TAP_ANIMATION = { scale: 0.96 };
+const TAP_TRANSITION = { type: "spring", stiffness: 500, damping: 30 } as const;
 
 export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "destructive";
 export type ButtonSize = "sm" | "md" | "lg";
@@ -30,11 +38,18 @@ interface SharedProps {
   children: React.ReactNode;
 }
 
+// Native onDrag*/onAnimation* handlers collide with Motion's own prop
+// signatures for the same names -- omitted since this Button never needs
+// native browser drag-and-drop or CSS animation callbacks.
+type ConflictingHtmlProps = "onDrag" | "onDragStart" | "onDragEnd" | "onAnimationStart" | "onAnimationEnd";
+
 type ButtonAsButton = SharedProps &
-  Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, keyof SharedProps> & { href?: undefined };
+  Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, keyof SharedProps | ConflictingHtmlProps> & {
+    href?: undefined;
+  };
 
 type ButtonAsLink = SharedProps &
-  Omit<React.ComponentProps<typeof Link>, keyof SharedProps> & { href: string };
+  Omit<React.ComponentProps<typeof Link>, keyof SharedProps | ConflictingHtmlProps> & { href: string };
 
 export function Button(props: ButtonAsButton | ButtonAsLink) {
   const {
@@ -68,16 +83,29 @@ export function Button(props: ButtonAsButton | ButtonAsLink) {
   if ("href" in props && props.href) {
     const { href, ...linkRest } = rest as Omit<ButtonAsLink, keyof SharedProps>;
     return (
-      <Link href={href} className={classes} {...linkRest}>
+      <MotionLink
+        href={href}
+        className={classes}
+        whileTap={TAP_ANIMATION}
+        transition={TAP_TRANSITION}
+        {...linkRest}
+      >
         {content}
-      </Link>
+      </MotionLink>
     );
   }
 
   const buttonRest = rest as Omit<ButtonAsButton, keyof SharedProps>;
   return (
-    <button type="button" className={classes} disabled={pending || buttonRest.disabled} {...buttonRest}>
+    <motion.button
+      type="button"
+      className={classes}
+      disabled={pending || buttonRest.disabled}
+      whileTap={TAP_ANIMATION}
+      transition={TAP_TRANSITION}
+      {...buttonRest}
+    >
       {content}
-    </button>
+    </motion.button>
   );
 }

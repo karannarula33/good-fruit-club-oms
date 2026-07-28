@@ -1,3 +1,4 @@
+import { motion } from "motion/react";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
@@ -89,9 +90,16 @@ export default async function PackerPage() {
 
       {packingOrders.length === 0 && <p className="text-neutral-500">Nothing to pack right now.</p>}
 
-      <div className="space-y-4">
-        {packingOrders.map((order) => (
-          <PackingOrderCard key={order.id} order={order} products={substituteProducts} />
+      <div className="space-y-3">
+        {packingOrders.map((order, index) => (
+          <motion.div
+            key={order.id}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05, duration: 0.2 }}
+          >
+            <PackingOrderCard order={order} products={substituteProducts} />
+          </motion.div>
         ))}
       </div>
     </div>

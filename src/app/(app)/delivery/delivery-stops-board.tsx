@@ -1,6 +1,7 @@
 "use client";
 
 import { useOptimistic, useState } from "react";
+import { motion } from "motion/react";
 import { DeliveryStopCard } from "./delivery-stop-card";
 import { MarkOutForDeliveryButton } from "./mark-out-for-delivery-button";
 import type { OrderStatus } from "@/lib/supabase/database.types";
@@ -47,16 +48,22 @@ export function DeliveryStopsBoard({ stops }: { stops: Stop[] }) {
 
       {optimisticStops.length === 0 && <p className="text-neutral-500">Nothing dispatched yet.</p>}
 
-      <div className="space-y-4">
-        {optimisticStops.map((stop) => (
-          <DeliveryStopCard
+      <div className="space-y-3">
+        {optimisticStops.map((stop, index) => (
+          <motion.div
             key={stop.id}
-            stop={stop}
-            selectable={stop.status === "dispatched"}
-            checked={selected.has(stop.id)}
-            onToggle={(checked) => toggle(stop.id, checked)}
-            onOptimisticDeliver={() => setOptimisticStatus({ ids: [stop.id], status: "delivered" })}
-          />
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.05, duration: 0.2 }}
+          >
+            <DeliveryStopCard
+              stop={stop}
+              selectable={stop.status === "dispatched"}
+              checked={selected.has(stop.id)}
+              onToggle={(checked) => toggle(stop.id, checked)}
+              onOptimisticDeliver={() => setOptimisticStatus({ ids: [stop.id], status: "delivered" })}
+            />
+          </motion.div>
         ))}
       </div>
     </div>
