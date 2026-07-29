@@ -14,7 +14,10 @@ const ROLE_HOME: Record<Role, string> = {
 };
 
 // Matches the design handoff's "Navigation Shell" table exactly -- label
-// text and tab order are part of the spec, not incidental.
+// text and tab order are part of the spec, not incidental. "Manage" is a
+// deliberate deviation beyond the design (added for the delete-test-data
+// utility screen), same precedent as the customer-resolver UI and
+// checkbox-batch actions added earlier.
 const TABS: Record<Role, { href: string; label: string }[]> = {
   admin: [
     { href: "/admin/orders", label: "Orders" },
@@ -24,6 +27,7 @@ const TABS: Record<Role, { href: string; label: string }[]> = {
     { href: "/delivery", label: "Route" },
     { href: "/status", label: "Status" },
     { href: "/admin/customers", label: "Ledger" },
+    { href: "/admin/manage-orders", label: "Manage" },
   ],
   packer: [
     { href: "/packer", label: "Packing" },
