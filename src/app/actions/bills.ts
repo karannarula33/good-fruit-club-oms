@@ -13,8 +13,11 @@ export type GenerateBillResult =
   | { ok: false; reason: "unpriced"; unpricedLineCount: number }
   | { ok: false; reason: "error"; error: string };
 
+// Admin-only: packing and billing are two separately-triggered steps
+// (packing-screen.tsx) -- a packer marks an order packed, an admin
+// separately reviews the priced line items and generates the bill.
 export async function generateBill(orderId: string): Promise<GenerateBillResult> {
-  const profile = await requireRole(["packer", "admin"]);
+  const profile = await requireRole(["admin"]);
   const supabase = await createClient();
 
   const { data: order, error: orderError } = await supabase

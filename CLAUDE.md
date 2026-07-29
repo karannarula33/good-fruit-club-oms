@@ -203,7 +203,7 @@ DLF Phase 2 (incl. Heritage City, The Vilas) → Sushant Lok → Near Hamilton C
 - **Admin — Order Entry:** paste box → parse → review/confirm (the core screen; optimize ruthlessly for speed).
 - **Admin — Prices:** paste vendor list → review → publish version; view active prices.
 - **Admin — Procurement:** per delivery date, base list vs extras, "mark list sent to vendor".
-- **Packer — Packing queue (mobile-first):** today's orders → per line: big numeric input for weight/count, unavailable, substitute → finalize order → bill auto-generates → "Send bill" wa.me button.
+- **Packer — Packing queue (mobile-first, shared with Admin):** persistent queue sectioned by status — To Pack / Packed · Ready to Bill / Dropped. Per line on a to-pack order: big numeric input for weight/count, unavailable, substitute → "Pack & Close Order" finalizes the order (`packed`, or auto-`cancelled` if every line ended up unavailable with no substitute). Packing and billing are two separately-triggered steps, not one auto-chain: a packed order sits in "Ready to Bill" until an **admin** opens it, reviews the priced line items (packers never see prices), and taps "Generate Bill →" → bill generates → "Send bill" wa.me button.
 - **Admin/all — Status board:** live (Supabase Realtime) list of today's orders with status chips; batch "Dispatch packed orders".
 - **Delivery — Route (mobile-first):** today's `dispatched`+ orders in zone-priority order; per stop: address, phone (tap-to-call), bill amount + net due; mark `out_for_delivery` (batch) and `delivered` → payment collected prompt.
 - **Admin — Customers & Ledger:** account view per customer: orders, bills, payments, balance; record payment with allocation; record advance.

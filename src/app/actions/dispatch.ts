@@ -24,7 +24,7 @@ export async function dispatchPackedOrders(
   const supabase = await createClient();
   const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
-  const { data: orders, error: loadError } = await supabase
+  const { data: packedOrders, error: loadError } = await supabase
     .from("orders")
     .select("id, status_timestamps")
     .eq("delivery_date", today)
@@ -33,7 +33,28 @@ export async function dispatchPackedOrders(
   if (loadError) {
     return { ok: false, error: loadError.message };
   }
-  if (!orders || orders.length === 0) {
+  if (!packedOrders || packedOrders.length === 0) {
+    return { ok: true, count: 0 };
+  }
+
+  // Packing and billing are two separately-triggered steps -- a packed
+  // order isn't necessarily billed yet. Dispatching before the WhatsApp
+  // bill exists would be wrong, so re-filter to only the ones with a
+  // bills row, same "don't trust the client selection" pattern as the
+  // date/status filters above.
+  const { data: billedRows, error: billsError } = await supabase
+    .from("bills")
+    .select("order_id")
+    .in(
+      "order_id",
+      packedOrders.map((o) => o.id),
+    );
+  if (billsError) {
+    return { ok: false, error: billsError.message };
+  }
+  const billedIds = new Set((billedRows ?? []).map((b) => b.order_id));
+  const orders = packedOrders.filter((o) => billedIds.has(o.id));
+  if (orders.length === 0) {
     return { ok: true, count: 0 };
   }
 

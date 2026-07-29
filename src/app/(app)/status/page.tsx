@@ -17,6 +17,12 @@ export default async function StatusBoardPage() {
     .eq("delivery_date", today)
     .neq("status", "cancelled");
 
+  const orderIds = (orders ?? []).map((o) => o.id);
+  const { data: billedRows } = orderIds.length
+    ? await supabase.from("bills").select("order_id").in("order_id", orderIds)
+    : { data: [] };
+  const billedIds = new Set((billedRows ?? []).map((b) => b.order_id));
+
   const rows = (orders ?? [])
     .map((order) => {
       const customer = order.customers as unknown as { display_name: string; zone: Zone } | null;
@@ -25,6 +31,7 @@ export default async function StatusBoardPage() {
         customerName: customer?.display_name ?? "Unknown customer",
         zone: customer?.zone ?? ("Unassigned" as Zone),
         status: order.status,
+        hasBill: billedIds.has(order.id),
         statusTimestamps: order.status_timestamps as Record<string, string>,
       };
     })

@@ -85,20 +85,23 @@ export async function finalizeOrder(
     }
   }
 
-  const mergedStatusTimestamps = { ...order.status_timestamps, packed: now.toISOString() };
+  // CLAUDE.md §3.5 allows cancelled "until packed" -- if nothing on the
+  // order actually got packed (every line unavailable, no substitutes),
+  // close it out as cancelled instead of leaving a ₹0 "ready to bill"
+  // order in the queue for admin to notice and cancel manually.
+  const finalStatus = plan.shouldCancel ? "cancelled" : "packed";
+  const mergedStatusTimestamps = { ...order.status_timestamps, [finalStatus]: now.toISOString() };
   const { error: finalizeError } = await supabase
     .from("orders")
-    .update({ status: "packed", status_timestamps: mergedStatusTimestamps })
+    .update({ status: finalStatus, status_timestamps: mergedStatusTimestamps })
     .eq("id", orderId);
   if (finalizeError) {
     return { ok: false, error: finalizeError.message };
   }
 
-  // No revalidatePath here on purpose -- it would auto-refresh the /packer
-  // page's server data as part of this action (Next.js does this even
-  // without an explicit router.refresh()), which would unmount this
-  // order's card the instant it's packed, before the packer can see the
-  // "Send bill" button generateBill produces next. The page only refreshes
-  // when the packer explicitly taps "Done" (see packing-order-card.tsx).
+  // No revalidatePath here -- finalizeOrder and generateBill are now two
+  // separately-triggered steps (packing-screen.tsx), and the packer's own
+  // client explicitly calls router.refresh() after Pack & Close returns to
+  // the queue, matching this app's established convention.
   return { ok: true };
 }

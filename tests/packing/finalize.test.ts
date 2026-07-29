@@ -70,4 +70,40 @@ describe("buildFinalizeOrderPlan", () => {
     });
     expect(plan.newSubstitutionLines[0].lockedPricePerUnit).toBeNull();
   });
+
+  it("flags shouldCancel when every line is unavailable and nothing was substituted", () => {
+    const plan = buildFinalizeOrderPlan({
+      resolutions: [
+        { lineId: "line-1", resolution: "unavailable", actualQty: null },
+        { lineId: "line-2", resolution: "unavailable", actualQty: null },
+      ],
+      substitutions: [],
+      priceItems: [],
+      now: new Date("2026-07-27T09:00:00Z"),
+    });
+    expect(plan.shouldCancel).toBe(true);
+  });
+
+  it("does not flag shouldCancel when at least one line is packed", () => {
+    const plan = buildFinalizeOrderPlan({
+      resolutions: [
+        { lineId: "line-1", resolution: "packed", actualQty: 2 },
+        { lineId: "line-2", resolution: "unavailable", actualQty: null },
+      ],
+      substitutions: [],
+      priceItems: [],
+      now: new Date("2026-07-27T09:00:00Z"),
+    });
+    expect(plan.shouldCancel).toBe(false);
+  });
+
+  it("does not flag shouldCancel when an unavailable line has a substitute", () => {
+    const plan = buildFinalizeOrderPlan({
+      resolutions: [{ lineId: "line-1", resolution: "unavailable", actualQty: null }],
+      substitutions: [{ substitutedForLineId: "line-1", productId: KIWI, actualQty: 1 }],
+      priceItems: [priceItem(KIWI, 150, "2026-07-27T00:00:00Z")],
+      now: new Date("2026-07-27T09:00:00Z"),
+    });
+    expect(plan.shouldCancel).toBe(false);
+  });
 });

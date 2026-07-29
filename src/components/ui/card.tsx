@@ -4,11 +4,12 @@ export function Card({
   className,
   elevated = false,
   children,
+  ...rest
 }: {
   className?: string;
   elevated?: boolean;
   children: React.ReactNode;
-}) {
+} & React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
@@ -18,6 +19,7 @@ export function Card({
           : "shadow-[0_1px_2px_rgba(0,0,0,.04)]",
         className,
       )}
+      {...rest}
     >
       {children}
     </div>

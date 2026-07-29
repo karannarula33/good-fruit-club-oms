@@ -36,6 +36,11 @@ export interface NewSubstitutionLine {
 export interface FinalizeOrderPlan {
   lineUpdates: LineUpdate[];
   newSubstitutionLines: NewSubstitutionLine[];
+  // True when nothing on the order actually got packed -- every line was
+  // marked unavailable and none of them had a substitute. The caller uses
+  // this to close the order out as cancelled instead of packed, rather
+  // than leaving a ₹0 "ready to bill" order in the queue.
+  shouldCancel: boolean;
 }
 
 export function buildFinalizeOrderPlan(params: {
@@ -58,5 +63,8 @@ export function buildFinalizeOrderPlan(params: {
     substitutedForLineId: substitution.substitutedForLineId,
   }));
 
-  return { lineUpdates, newSubstitutionLines };
+  const shouldCancel =
+    !lineUpdates.some((update) => update.lineStatus === "packed") && newSubstitutionLines.length === 0;
+
+  return { lineUpdates, newSubstitutionLines, shouldCancel };
 }
