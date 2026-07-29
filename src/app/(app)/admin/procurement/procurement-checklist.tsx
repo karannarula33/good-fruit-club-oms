@@ -1,10 +1,15 @@
 "use client";
 
 import { useOptimistic, useState, useTransition } from "react";
-import { toggleProcurementItemCheck } from "@/app/actions/procurement";
+import { useRouter } from "next/navigation";
+import { Check, MessageCircle } from "lucide-react";
+import { markProcurementItemsSent } from "@/app/actions/procurement";
+import { buildProcurementMessage } from "@/lib/procurement/message";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/form-error";
+import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
 import type { ProcurementContribution } from "@/lib/procurement/aggregate";
 
@@ -23,28 +28,53 @@ function contributionsText(contributions: ProcurementContribution[]): string {
 }
 
 export function ProcurementChecklist({ date, rows }: { date: string; rows: ProcurementDisplayRow[] }) {
-  const [checked, setChecked] = useOptimistic(
-    new Set(rows.filter((r) => r.checked).map((r) => r.productId)),
-    (state, update: { productId: string; checked: boolean }) => {
-      const next = new Set(state);
-      if (update.checked) next.add(update.productId);
-      else next.delete(update.productId);
-      return next;
-    },
-  );
-  const [errors, setErrors] = useState<Record<string, string>>({});
-  const [, startTransition] = useTransition();
+  const router = useRouter();
+  const { showToast } = useToast();
 
-  function handleToggle(row: ProcurementDisplayRow, next: boolean) {
-    setErrors((prev) => ({ ...prev, [row.productId]: "" }));
-    startTransition(async () => {
-      setChecked({ productId: row.productId, checked: next });
-      const result = await toggleProcurementItemCheck(date, row.productId, next, row.totalQty);
-      if (!result.ok) {
-        setChecked({ productId: row.productId, checked: !next });
-        setErrors((prev) => ({ ...prev, [row.productId]: result.error }));
-      }
+  const [sent, setSent] = useOptimistic(
+    new Set(rows.filter((r) => r.checked && r.extraQty === 0).map((r) => r.productId)),
+    (state, ids: string[]) => new Set([...state, ...ids]),
+  );
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+
+  function toggleSelected(productId: string, checked: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(productId);
+      else next.delete(productId);
+      return next;
     });
+  }
+
+  const selectedRows = rows.filter((row) => selected.has(row.productId));
+
+  function handleMarkSent() {
+    setError(null);
+    const items = selectedRows.map((row) => ({ productId: row.productId, qty: row.totalQty }));
+    const ids = items.map((i) => i.productId);
+    startTransition(async () => {
+      setSent(ids);
+      const result = await markProcurementItemsSent(date, items);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setSelected(new Set());
+      showToast("Marked sent to vendor ✓");
+      router.refresh();
+    });
+  }
+
+  function handleWhatsApp() {
+    const text = buildProcurementMessage(
+      date,
+      selectedRows.map((row) => ({ name: row.name, qty: row.totalQty, unitLabel: row.unitLabel })),
+    );
+    navigator.clipboard.writeText(text).catch(() => {});
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+    showToast("Copied — opening WhatsApp");
   }
 
   if (rows.length === 0) {
@@ -52,28 +82,25 @@ export function ProcurementChecklist({ date, rows }: { date: string; rows: Procu
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      {rows.map((row) => {
-        const isChecked = checked.has(row.productId);
-        return (
-          <div key={row.productId} className="flex flex-col gap-1">
+    <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        {rows.map((row) => {
+          const isSent = sent.has(row.productId) || (row.checked && row.extraQty === 0);
+          const isSelected = selected.has(row.productId);
+          return (
             <Card
-              elevated={!isChecked}
-              className={cn("flex items-center gap-3 !space-y-0", isChecked && "opacity-60")}
+              key={row.productId}
+              elevated={!isSent}
+              className={cn("flex items-center gap-3 !space-y-0", isSent && "opacity-60")}
             >
               <input
                 type="checkbox"
-                checked={isChecked}
-                onChange={(e) => handleToggle(row, e.target.checked)}
+                checked={isSelected}
+                onChange={(e) => toggleSelected(row.productId, e.target.checked)}
                 className="size-4 shrink-0"
               />
               <div className="min-w-0 flex-1">
-                <div
-                  className={cn(
-                    "font-sans text-sm font-bold",
-                    isChecked ? "text-muted" : "text-foreground",
-                  )}
-                >
+                <div className={cn("font-sans text-sm font-bold", isSent ? "text-muted" : "text-foreground")}>
                   {row.name}
                 </div>
                 {row.contributions.length > 0 && (
@@ -91,12 +118,34 @@ export function ProcurementChecklist({ date, rows }: { date: string; rows: Procu
                     +{row.extraQty} new
                   </Badge>
                 )}
+                {isSent && row.extraQty === 0 && (
+                  <Badge tone="success" size="sm">
+                    <Check className="size-3" aria-hidden="true" /> Sent
+                  </Badge>
+                )}
               </div>
             </Card>
-            {errors[row.productId] && <FormError>{errors[row.productId]}</FormError>}
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Button
+          variant="dark"
+          fullWidth
+          onClick={handleMarkSent}
+          disabled={selected.size === 0}
+          pending={pending}
+          pendingText="Marking…"
+        >
+          Mark sent to vendor{selected.size > 0 ? ` (${selected.size})` : ""}
+        </Button>
+        <Button variant="outline" fullWidth onClick={handleWhatsApp} disabled={selected.size === 0}>
+          <MessageCircle className="size-5" aria-hidden="true" />
+          Copy as WhatsApp message
+        </Button>
+        {error && <FormError>{error}</FormError>}
+      </div>
     </div>
   );
 }
