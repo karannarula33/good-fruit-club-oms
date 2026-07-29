@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { StatusBoardRealtime } from "./status-board-realtime";
 
 export default async function StatusBoardPage() {
-  const profile = await requireRole(["admin", "packer", "delivery"]);
+  await requireRole(["admin", "packer", "delivery"]);
 
   const supabase = await createClient();
   const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
@@ -38,9 +38,11 @@ export default async function StatusBoardPage() {
     .sort((a, b) => compareByZone(a.zone, b.zone) || a.customerName.localeCompare(b.customerName));
 
   return (
-    <div className="p-4 space-y-4">
-      <PageHeader title="Status board" subtitle="Today's orders, live" />
-      <StatusBoardRealtime initialOrders={rows} today={today} isAdmin={profile.role === "admin"} />
+    <div className="px-[18px] pt-5 pb-6">
+      <PageHeader title="Status Board" subtitle="Live · today's orders" />
+      <div className="mt-4">
+        <StatusBoardRealtime initialOrders={rows} today={today} />
+      </div>
     </div>
   );
 }

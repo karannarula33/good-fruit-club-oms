@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { zonePriority } from "@/lib/customers/zone";
 import { PageHeader } from "@/components/ui/page-header";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { ZoneSelect } from "./zone-select";
+import { CustomerList } from "./customer-list";
 
 export default async function AdminCustomersPage() {
   await requireRole(["admin"]);
@@ -26,9 +24,9 @@ export default async function AdminCustomersPage() {
   const unassignedCount = sorted.filter((c) => c.zone === "Unassigned").length;
 
   return (
-    <div className="p-6 space-y-4">
+    <div className="flex flex-col gap-4 px-[18px] pt-5 pb-6">
       <PageHeader
-        title="Customers"
+        title="Customer Ledger"
         subtitle={
           <>
             {sorted.length} customers
@@ -38,35 +36,7 @@ export default async function AdminCustomersPage() {
           </>
         }
       />
-
-      <Table>
-        <THead>
-          <TR>
-            <TH>Name</TH>
-            <TH>Phone</TH>
-            <TH>Address</TH>
-            <TH>Zone</TH>
-            <TH>Notes</TH>
-          </TR>
-        </THead>
-        <TBody>
-          {sorted.map((customer) => (
-            <TR key={customer.id} className="align-top">
-              <TD>
-                <Link href={`/admin/customers/${customer.id}`} className="underline">
-                  {customer.display_name}
-                </Link>
-              </TD>
-              <TD className="text-neutral-600 dark:text-neutral-400">{customer.phone ?? "—"}</TD>
-              <TD className="text-neutral-600 dark:text-neutral-400 max-w-sm">{customer.address}</TD>
-              <TD>
-                <ZoneSelect customerId={customer.id} zone={customer.zone} />
-              </TD>
-              <TD className="text-neutral-600 dark:text-neutral-400 max-w-xs">{customer.notes ?? "—"}</TD>
-            </TR>
-          ))}
-        </TBody>
-      </Table>
+      <CustomerList customers={sorted} />
     </div>
   );
 }

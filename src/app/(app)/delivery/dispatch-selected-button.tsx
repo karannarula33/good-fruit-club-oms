@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Truck } from "lucide-react";
 import { dispatchPackedOrders } from "@/app/actions/dispatch";
 import { Button } from "@/components/ui/button";
+import { FormError } from "@/components/ui/form-error";
 
-export function DispatchButton({
+export function DispatchSelectedButton({
   selectedIds,
   onDispatched,
   onOptimisticDispatch,
@@ -17,39 +18,37 @@ export function DispatchButton({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   function handleClick() {
-    setMessage(null);
+    setError(null);
     const ids = selectedIds;
     startTransition(async () => {
       onOptimisticDispatch(ids);
       const result = await dispatchPackedOrders(ids);
       if (!result.ok) {
-        setMessage(result.error);
+        setError(result.error);
         return;
       }
-      setMessage(`Dispatched ${result.count} order${result.count === 1 ? "" : "s"}.`);
       onDispatched();
       router.refresh();
     });
   }
 
   return (
-    <span className="inline-flex items-center gap-2">
+    <div className="space-y-1">
       <Button
-        variant="primary"
-        size="sm"
-        pill
+        variant="dark"
+        fullWidth
         onClick={handleClick}
         disabled={selectedIds.length === 0}
         pending={pending}
         pendingText="Dispatching…"
       >
-        <Truck className="size-4" aria-hidden="true" />
+        <Truck className="size-5" aria-hidden="true" />
         Dispatch selected{selectedIds.length > 0 ? ` (${selectedIds.length})` : ""}
       </Button>
-      {message && <span className="text-xs text-neutral-600 dark:text-neutral-400">{message}</span>}
-    </span>
+      {error && <FormError>{error}</FormError>}
+    </div>
   );
 }

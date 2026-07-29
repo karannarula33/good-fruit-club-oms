@@ -4,9 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { computeCustomerBalance, derivePaymentStatus, type PaymentStatus } from "@/lib/billing/compute";
 import { formatIstDisplay } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { Card } from "@/components/ui/card";
+import { Avatar } from "@/components/ui/avatar";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
-import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/orders/status-display";
 import { RecordPaymentForm } from "./record-payment-form";
 
 const PAYMENT_STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
@@ -82,104 +82,76 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
     .map((o) => ({ id: o.id, deliveryDate: o.deliveryDate, remainingDue: o.remainingDue as number }));
 
   return (
-    <div className="p-6 space-y-6">
-      <PageHeader
-        title={customer.display_name}
-        backHref="/admin/customers"
-        backLabel="Customers"
-        subtitle={
-          <>
-            {customer.phone ?? "No phone"} · {customer.address} · {customer.zone}
-            <br />
-            <span className="text-base font-medium text-foreground">
-              Balance:{" "}
-              {balance > 0 ? (
-                <span className="text-danger-text">₹{balance.toFixed(2)} owed</span>
-              ) : balance < 0 ? (
-                <span className="text-success-text">₹{Math.abs(balance).toFixed(2)} advance</span>
-              ) : (
-                <span className="text-neutral-600 dark:text-neutral-400">₹0</span>
-              )}
-            </span>
-          </>
-        }
-      />
+    <div className="flex flex-col gap-5 px-[18px] pt-5 pb-6">
+      <PageHeader title="Account" backHref="/admin/customers" backLabel="Customers" />
 
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Orders</h2>
-        <Table>
-          <THead>
-            <TR>
-              <TH>Delivery date</TH>
-              <TH>Order status</TH>
-              <TH>Bill total</TH>
-              <TH>Paid</TH>
-              <TH>Remaining due</TH>
-              <TH>Payment status</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {orderRows.map((order) => (
-              <TR key={order.id}>
-                <TD>{order.deliveryDate}</TD>
-                <TD>
-                  <Badge tone={ORDER_STATUS_TONE[order.status]} size="sm">
-                    {ORDER_STATUS_LABEL[order.status]}
-                  </Badge>
-                </TD>
-                <TD>{order.total !== null ? `₹${order.total.toFixed(2)}` : "Not billed"}</TD>
-                <TD>{order.total !== null ? `₹${order.allocated.toFixed(2)}` : "—"}</TD>
-                <TD>{order.remainingDue !== null ? `₹${order.remainingDue.toFixed(2)}` : "—"}</TD>
-                <TD>
-                  {order.paymentStatus && (
-                    <Badge tone={PAYMENT_STATUS_TONE[order.paymentStatus]} size="sm">
-                      {order.paymentStatus}
-                    </Badge>
-                  )}
-                </TD>
-              </TR>
-            ))}
-          </TBody>
-        </Table>
-      </div>
+      <Card elevated>
+        <div className="mb-1 flex items-center gap-3">
+          <Avatar name={customer.display_name} size={46} />
+          <div>
+            <div className="font-display text-base font-bold text-foreground">{customer.display_name}</div>
+            <div className="font-sans text-[11.5px] font-medium text-muted">{customer.phone ?? "No phone"}</div>
+          </div>
+        </div>
+        <div className="font-sans text-xs font-medium text-muted">
+          {customer.address} · {customer.zone}
+        </div>
+        <div className="flex items-center justify-between border-t border-dashed border-[#ECEAE3] pt-3.5">
+          <div className="font-sans text-[13px] font-semibold text-[#5b5e66]">Balance due</div>
+          <div className="font-display text-xl font-extrabold text-foreground">
+            {balance > 0 ? (
+              `₹${balance.toFixed(2)}`
+            ) : balance < 0 ? (
+              <span className="text-success-text">₹{Math.abs(balance).toFixed(2)} advance</span>
+            ) : (
+              "₹0"
+            )}
+          </div>
+        </div>
+      </Card>
 
       <RecordPaymentForm customerId={customer.id} outstandingOrders={outstandingOrders} />
 
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Ledger history</h2>
-        <Table>
-          <THead>
-            <TR>
-              <TH>Date</TH>
-              <TH>Type</TH>
-              <TH>Amount</TH>
-              <TH>Mode</TH>
-              <TH>Note</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {(ledgerEntries ?? []).map((entry) => (
-              <TR key={entry.id}>
-                <TD className="text-neutral-600 dark:text-neutral-400">{formatIstDisplay(new Date(entry.created_at))}</TD>
-                <TD>
-                  <Badge tone={entry.entry_type === "debit" ? "danger" : "success"} size="sm">
-                    {entry.entry_type}
-                  </Badge>
-                </TD>
-                <TD>₹{entry.amount.toFixed(2)}</TD>
-                <TD className="text-neutral-600 dark:text-neutral-400">{entry.mode ?? "—"}</TD>
-                <TD className="text-neutral-600 dark:text-neutral-400">{entry.note ?? "—"}</TD>
-              </TR>
-            ))}
-            {(ledgerEntries ?? []).length === 0 && (
-              <TR>
-                <TD colSpan={5} className="text-neutral-500">
-                  No ledger activity yet.
-                </TD>
-              </TR>
+      <div className="flex flex-col gap-2">
+        <div className="px-0.5 font-sans text-[11px] font-bold uppercase tracking-wide text-muted">Order history</div>
+        {orderRows.map((order) => (
+          <Card key={order.id} elevated className="flex items-center justify-between !space-y-0">
+            <div className="font-sans text-[13.5px] font-bold text-foreground">{order.deliveryDate}</div>
+            {order.paymentStatus && (
+              <Badge tone={PAYMENT_STATUS_TONE[order.paymentStatus]} size="sm">
+                {order.paymentStatus}
+              </Badge>
             )}
-          </TBody>
-        </Table>
+            <div className="font-display text-sm font-bold text-foreground">
+              {order.total !== null ? `₹${order.total.toFixed(2)}` : "Not billed"}
+            </div>
+          </Card>
+        ))}
+        {orderRows.length === 0 && <p className="font-sans text-sm text-muted">No orders yet.</p>}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="px-0.5 font-sans text-[11px] font-bold uppercase tracking-wide text-muted">Ledger history</div>
+        {(ledgerEntries ?? []).map((entry) => (
+          <Card key={entry.id} elevated className="flex items-center justify-between !space-y-0">
+            <div>
+              <div className="flex items-center gap-2">
+                <Badge tone={entry.entry_type === "debit" ? "danger" : "success"} size="sm">
+                  {entry.entry_type}
+                </Badge>
+                <span className="font-sans text-[11.5px] font-medium text-muted">
+                  {formatIstDisplay(new Date(entry.created_at))}
+                </span>
+              </div>
+              {entry.note && <div className="mt-1 font-sans text-xs text-muted">{entry.note}</div>}
+            </div>
+            <div className="text-right">
+              <div className="font-display text-sm font-bold text-foreground">₹{entry.amount.toFixed(2)}</div>
+              {entry.mode && <div className="font-sans text-[11px] text-muted">{entry.mode}</div>}
+            </div>
+          </Card>
+        ))}
+        {(ledgerEntries ?? []).length === 0 && <p className="font-sans text-sm text-muted">No ledger activity yet.</p>}
       </div>
     </div>
   );

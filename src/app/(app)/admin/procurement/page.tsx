@@ -6,7 +6,7 @@ import { formatIstDisplay, utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { cn } from "@/lib/cn";
 import { MarkSentButton } from "./mark-sent-button";
 
 function addDays(dateStr: string, days: number): string {
@@ -15,33 +15,31 @@ function addDays(dateStr: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function ProcurementTable({
+function ProcurementRows({
   rows,
+  tint = false,
 }: {
   rows: { name: string; unitLabel: string | null; qty: number }[];
+  tint?: boolean;
 }) {
   if (rows.length === 0) {
-    return <p className="text-sm text-neutral-500">Nothing here.</p>;
+    return <p className="font-sans text-sm text-muted">Nothing here.</p>;
   }
   return (
-    <Table>
-      <THead>
-        <TR>
-          <TH>Product</TH>
-          <TH>Unit</TH>
-          <TH>Qty</TH>
-        </TR>
-      </THead>
-      <TBody>
-        {rows.map((row) => (
-          <TR key={row.name}>
-            <TD>{row.name}</TD>
-            <TD className="text-neutral-600 dark:text-neutral-400">{row.unitLabel ?? "—"}</TD>
-            <TD>{row.qty}</TD>
-          </TR>
-        ))}
-      </TBody>
-    </Table>
+    <div className="flex flex-col gap-2">
+      {rows.map((row) => (
+        <Card
+          key={row.name}
+          elevated={!tint}
+          className={cn("flex items-center justify-between !space-y-0", tint && "bg-[#FFF4E8]")}
+        >
+          <div className="font-sans text-sm font-bold text-foreground">{row.name}</div>
+          <div className="font-sans text-[12.5px] font-semibold text-muted">
+            {row.qty} {row.unitLabel ?? ""}
+          </div>
+        </Card>
+      ))}
+    </div>
   );
 }
 
@@ -99,27 +97,27 @@ export default async function AdminProcurementPage({
   const sentByName = (mark?.profiles as unknown as { full_name: string } | null)?.full_name;
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="flex flex-col gap-5 px-[18px] pt-5 pb-6">
       <PageHeader
         title="Procurement"
-        subtitle="Base list vs extras for a delivery date."
+        subtitle="Before the mandi run"
         action={
           <div className="flex items-center gap-3">
-            <Link href={`/admin/procurement?date=${addDays(date, -1)}`} className="text-sm underline">
-              ← Prev day
+            <Link href={`/admin/procurement?date=${addDays(date, -1)}`} className="font-sans text-sm font-bold text-muted">
+              ← Prev
             </Link>
             <form>
               <Input type="date" name="date" defaultValue={date} size="sm" />
             </form>
-            <Link href={`/admin/procurement?date=${addDays(date, 1)}`} className="text-sm underline">
-              Next day →
+            <Link href={`/admin/procurement?date=${addDays(date, 1)}`} className="font-sans text-sm font-bold text-muted">
+              Next →
             </Link>
           </div>
         }
       />
 
-      <Card className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-sm text-neutral-700 dark:text-neutral-300">
+      <Card elevated className="flex items-center justify-between flex-wrap gap-3">
+        <p className="font-sans text-sm text-[#5b5e66]">
           {listSentAt ? (
             <>
               Sent to vendor at {formatIstDisplay(listSentAt)}
@@ -132,14 +130,14 @@ export default async function AdminProcurementPage({
         {!listSentAt && <MarkSentButton deliveryDate={date} />}
       </Card>
 
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Base list</h2>
-        <ProcurementTable rows={toRows(base)} />
+      <div className="flex flex-col gap-2">
+        <div className="px-0.5 font-sans text-[11px] font-bold uppercase tracking-wide text-muted">Sent to vendor</div>
+        <ProcurementRows rows={toRows(base)} />
       </div>
 
-      <div className="space-y-2">
-        <h2 className="text-lg font-semibold text-danger-text">Extras</h2>
-        <ProcurementTable rows={toRows(extras)} />
+      <div className="flex flex-col gap-2">
+        <div className="px-0.5 font-sans text-[11px] font-bold uppercase tracking-wide text-muted">New extras</div>
+        <ProcurementRows rows={toRows(extras)} tint />
       </div>
     </div>
   );

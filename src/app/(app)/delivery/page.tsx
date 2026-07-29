@@ -7,7 +7,7 @@ import { DeliveryStopsBoard } from "./delivery-stops-board";
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
 export default async function DeliveryPage() {
-  await requireRole(["delivery", "admin"]);
+  const profile = await requireRole(["delivery", "admin"]);
 
   const supabase = await createClient();
   const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
@@ -16,7 +16,7 @@ export default async function DeliveryPage() {
     .from("orders")
     .select("id, status, customer_id, customers(display_name, phone, address, zone)")
     .eq("delivery_date", today)
-    .in("status", ["dispatched", "out_for_delivery", "delivered"]);
+    .in("status", ["packed", "dispatched", "out_for_delivery", "delivered"]);
 
   const orderIds = (orders ?? []).map((o) => o.id);
   const { data: bills } = orderIds.length
@@ -24,7 +24,7 @@ export default async function DeliveryPage() {
     : { data: [] };
   const billByOrderId = new Map((bills ?? []).map((b) => [b.order_id, b]));
 
-  const stops = (orders ?? [])
+  const allOrders = (orders ?? [])
     .map((order) => {
       const customer = order.customers as unknown as {
         display_name: string;
@@ -46,10 +46,15 @@ export default async function DeliveryPage() {
     })
     .sort((a, b) => compareByZone(a.zone, b.zone) || a.customerName.localeCompare(b.customerName));
 
+  const readyToDispatch = allOrders.filter((o) => o.status === "packed" && o.billTotal !== null);
+  const stops = allOrders.filter((o) => o.status !== "packed");
+
   return (
-    <div className="p-4 space-y-4">
-      <PageHeader title="Delivery route" subtitle={`${stops.length} stop${stops.length === 1 ? "" : "s"} today`} />
-      <DeliveryStopsBoard stops={stops} />
+    <div className="px-[18px] pt-5 pb-4">
+      <PageHeader title="Delivery Route" subtitle={`${stops.length} stop${stops.length === 1 ? "" : "s"} on the run`} />
+      <div className="mt-4">
+        <DeliveryStopsBoard readyToDispatch={readyToDispatch} stops={stops} isAdmin={profile.role === "admin"} />
+      </div>
     </div>
   );
 }

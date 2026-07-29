@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { FormError } from "@/components/ui/form-error";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import type { LedgerMode } from "@/lib/supabase/database.types";
 
 interface OutstandingOrder {
@@ -23,6 +24,7 @@ export function RecordPaymentForm({
   outstandingOrders: OutstandingOrder[];
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [amount, setAmount] = useState("");
@@ -92,90 +94,96 @@ export function RecordPaymentForm({
       setNote("");
       setChecked({});
       setAllocationAmounts({});
+      setOpen(false);
       router.refresh();
     });
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-3 rounded-lg border border-neutral-300 dark:border-neutral-700 p-3"
-    >
-      <h2 className="text-lg font-semibold">Record payment</h2>
-
-      <div className="flex flex-wrap gap-3">
-        <label className="flex flex-col text-sm gap-1">
-          Amount (₹)
-          <Input
-            type="number"
-            inputMode="decimal"
-            step="0.01"
-            min="0"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-          />
-        </label>
-        <label className="flex flex-col text-sm gap-1">
-          Mode
-          <Select value={mode} onChange={(e) => setMode(e.target.value as LedgerMode)}>
-            <option value="cash">Cash</option>
-            <option value="upi">UPI</option>
-            <option value="other">Other</option>
-          </Select>
-        </label>
-        <label className="flex flex-col text-sm gap-1 flex-1 min-w-[10rem]">
-          Note
-          <Input type="text" value={note} onChange={(e) => setNote(e.target.value)} />
-        </label>
-      </div>
-
-      {outstandingOrders.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-sm text-neutral-600 dark:text-neutral-400">
-            Allocate to outstanding orders (leave unchecked to record as an advance):
-          </p>
-          {outstandingOrders.map((order) => (
-            <div key={order.id} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={!!checked[order.id]}
-                onChange={(e) => toggleOrder(order, e.target.checked)}
-              />
-              <span className="w-28">{order.deliveryDate}</span>
-              <span className="text-neutral-600 dark:text-neutral-400 w-32">Due ₹{order.remainingDue.toFixed(2)}</span>
-              {checked[order.id] && (
-                <Input
-                  className="w-24"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  value={allocationAmounts[order.id] ?? String(order.remainingDue)}
-                  onChange={(e) =>
-                    setAllocationAmounts((prev) => ({ ...prev, [order.id]: e.target.value }))
-                  }
-                />
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {validAmount && (
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          {remainder > 0
-            ? `₹${remainder.toFixed(2)} will be recorded as an advance.`
-            : remainder < 0
-              ? `Allocated amount exceeds the payment by ₹${Math.abs(remainder).toFixed(2)} — reduce an allocation.`
-              : "Fully allocated."}
-        </p>
-      )}
-
-      {error && <FormError>{error}</FormError>}
-
-      <Button type="submit" disabled={!validAmount || remainder < 0} pending={isPending} pendingText="Recording…">
-        Record payment
+    <>
+      <Button variant="primary" fullWidth onClick={() => setOpen(true)}>
+        Record Payment
       </Button>
-    </form>
+
+      <BottomSheet open={open} onClose={() => setOpen(false)}>
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="mb-0.5 font-display text-base font-bold text-foreground">Record Payment</div>
+
+          <label className="flex flex-col gap-1 font-sans text-sm font-semibold text-muted">
+            Amount (₹)
+            <Input
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              size="lg"
+              className="w-full text-center"
+            />
+          </label>
+          <div className="flex gap-3">
+            <label className="flex flex-1 flex-col gap-1 font-sans text-sm font-semibold text-muted">
+              Mode
+              <Select value={mode} onChange={(e) => setMode(e.target.value as LedgerMode)} className="w-full">
+                <option value="cash">Cash</option>
+                <option value="upi">UPI</option>
+                <option value="other">Other</option>
+              </Select>
+            </label>
+            <label className="flex flex-1 flex-col gap-1 font-sans text-sm font-semibold text-muted">
+              Note
+              <Input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full" />
+            </label>
+          </div>
+
+          {outstandingOrders.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="font-sans text-xs font-semibold text-muted">
+                Allocate to outstanding orders (leave unchecked to record as an advance):
+              </p>
+              {outstandingOrders.map((order) => (
+                <div key={order.id} className="flex items-center gap-2 font-sans text-sm">
+                  <input
+                    type="checkbox"
+                    checked={!!checked[order.id]}
+                    onChange={(e) => toggleOrder(order, e.target.checked)}
+                  />
+                  <span className="w-28">{order.deliveryDate}</span>
+                  <span className="w-32 text-muted">Due ₹{order.remainingDue.toFixed(2)}</span>
+                  {checked[order.id] && (
+                    <Input
+                      className="w-24"
+                      type="number"
+                      inputMode="decimal"
+                      step="0.01"
+                      min="0"
+                      value={allocationAmounts[order.id] ?? String(order.remainingDue)}
+                      onChange={(e) => setAllocationAmounts((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                    />
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {validAmount && (
+            <p className="font-sans text-xs font-semibold text-muted">
+              {remainder > 0
+                ? `₹${remainder.toFixed(2)} will be recorded as an advance.`
+                : remainder < 0
+                  ? `Allocated amount exceeds the payment by ₹${Math.abs(remainder).toFixed(2)} — reduce an allocation.`
+                  : "Fully allocated."}
+            </p>
+          )}
+
+          {error && <FormError>{error}</FormError>}
+
+          <Button type="submit" variant="dark" fullWidth disabled={!validAmount || remainder < 0} pending={isPending} pendingText="Recording…">
+            Save Payment
+          </Button>
+        </form>
+      </BottomSheet>
+    </>
   );
 }

@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useOptimistic, useState } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { formatIstDisplay } from "@/lib/time/ist";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
-import { DISPLAY_STATUS_LABEL, deriveDisplayStatus, displayStatusChipStyle, type DisplayStatus } from "@/lib/orders/status-display";
+import { DISPLAY_STATUS_LABEL, deriveDisplayStatus, displayStatusChipStyle } from "@/lib/orders/status-display";
 import type { OrderStatus } from "@/lib/supabase/database.types";
-import { DispatchButton } from "./dispatch-button";
 
 interface StatusRow {
   id: string;
@@ -21,32 +19,8 @@ interface StatusRow {
 
 const REALTIME_DEBOUNCE_MS = 400;
 
-const DISPLAY_STATUS_ORDER: DisplayStatus[] = [
-  "recorded",
-  "packed",
-  "billed",
-  "dispatched",
-  "out_for_delivery",
-  "delivered",
-  "cancelled",
-];
-
-export function StatusBoardRealtime({
-  initialOrders,
-  today,
-  isAdmin,
-}: {
-  initialOrders: StatusRow[];
-  today: string;
-  isAdmin: boolean;
-}) {
+export function StatusBoardRealtime({ initialOrders, today }: { initialOrders: StatusRow[]; today: string }) {
   const router = useRouter();
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [optimisticOrders, setOptimisticStatus] = useOptimistic(
-    initialOrders,
-    (state, update: { ids: string[]; status: OrderStatus }) =>
-      state.map((o) => (update.ids.includes(o.id) ? { ...o, status: update.status } : o)),
-  );
 
   useEffect(() => {
     const supabase = createClient();
@@ -70,89 +44,26 @@ export function StatusBoardRealtime({
     };
   }, [today, router]);
 
-  function toggle(orderId: string, checked: boolean) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (checked) next.add(orderId);
-      else next.delete(orderId);
-      return next;
-    });
+  if (initialOrders.length === 0) {
+    return <p className="font-sans text-sm text-muted">No orders for today.</p>;
   }
 
-  const displayStatusOf = (o: StatusRow) => deriveDisplayStatus(o.status, o.hasBill);
-
-  const counts = DISPLAY_STATUS_ORDER.map((status) => ({
-    status,
-    count: optimisticOrders.filter((o) => displayStatusOf(o) === status).length,
-  })).filter((s) => s.count > 0);
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        {counts.map(({ status, count }) => (
-          <Badge key={status} style={displayStatusChipStyle(status)}>
-            {DISPLAY_STATUS_LABEL[status]}: {count}
-          </Badge>
-        ))}
-        {isAdmin && (
-          <DispatchButton
-            selectedIds={[...selected]}
-            onDispatched={() => setSelected(new Set())}
-            onOptimisticDispatch={(ids) => setOptimisticStatus({ ids, status: "dispatched" })}
-          />
-        )}
-      </div>
-
-      {optimisticOrders.length === 0 && <p className="text-neutral-500">No orders for today.</p>}
-
-      {optimisticOrders.length > 0 && (
-        <Table>
-          <THead>
-            <TR>
-              {isAdmin && <TH className="w-8" />}
-              <TH>Customer</TH>
-              <TH>Zone</TH>
-              <TH>Status</TH>
-              <TH>Since</TH>
-            </TR>
-          </THead>
-          <TBody>
-            {optimisticOrders.map((order) => {
-              const since = order.statusTimestamps[order.status];
-              // Only packed AND billed orders are dispatch-eligible -- a
-              // packed order with no bill yet can't be sent (dispatchPackedOrders
-              // re-checks this server-side too, this is just the UI gate).
-              const dispatchable = order.status === "packed" && order.hasBill;
-              const displayStatus = displayStatusOf(order);
-              return (
-                <TR key={order.id}>
-                  {isAdmin && (
-                    <TD>
-                      {dispatchable && (
-                        <input
-                          type="checkbox"
-                          checked={selected.has(order.id)}
-                          onChange={(e) => toggle(order.id, e.target.checked)}
-                        />
-                      )}
-                    </TD>
-                  )}
-                  <TD>{order.customerName}</TD>
-                  <TD className="text-neutral-600 dark:text-neutral-400">{order.zone}</TD>
-                  <TD>
-                    <Badge key={displayStatus} style={displayStatusChipStyle(displayStatus)} size="sm">
-                      {DISPLAY_STATUS_LABEL[displayStatus]}
-                    </Badge>
-                  </TD>
-                  <TD className="text-neutral-600 dark:text-neutral-400">
-                    {since ? formatIstDisplay(new Date(since)) : "—"}
-                  </TD>
-                </TR>
-              );
-            })}
-          </TBody>
-        </Table>
-      )}
+    <div className="flex flex-col gap-2">
+      {initialOrders.map((order) => {
+        const displayStatus = deriveDisplayStatus(order.status, order.hasBill);
+        return (
+          <Card key={order.id} elevated className="flex items-center justify-between !space-y-0">
+            <div>
+              <div className="font-display text-[14.5px] font-bold text-foreground">{order.customerName}</div>
+              <div className="mt-0.5 font-sans text-[11.5px] font-semibold text-muted">{order.zone}</div>
+            </div>
+            <Badge key={displayStatus} style={displayStatusChipStyle(displayStatus)} size="sm">
+              {DISPLAY_STATUS_LABEL[displayStatus]}
+            </Badge>
+          </Card>
+        );
+      })}
     </div>
   );
 }
