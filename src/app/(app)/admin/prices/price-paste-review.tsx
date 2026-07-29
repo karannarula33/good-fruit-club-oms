@@ -4,6 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { parsePriceListDraft, publishPriceVersion, type ReviewLine } from "@/app/actions/prices";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { FormError } from "@/components/ui/form-error";
+import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 
 type Step = "paste" | "review";
 
@@ -95,24 +100,20 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
       {step === "paste" && (
         <form onSubmit={handleParse} className="space-y-4">
           <label className="block space-y-1">
-            <span className="text-sm text-neutral-600">Paste today&apos;s price list</span>
+            <span className="text-sm text-neutral-600 dark:text-neutral-400">Paste today&apos;s price list</span>
             <textarea
               required
               rows={12}
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm font-mono"
+              className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand"
               placeholder={"Chausa Mango: ₹295 / KG\nBanarsi Langda Mango: ₹225 / KG\n..."}
             />
           </label>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-md bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
-          >
-            {pending ? "Parsing..." : "Parse"}
-          </button>
+          {error && <FormError>{error}</FormError>}
+          <Button type="submit" pending={pending} pendingText="Parsing…">
+            Parse
+          </Button>
         </form>
       )}
 
@@ -120,121 +121,108 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
         <div className="space-y-4">
           <div className="flex flex-wrap gap-4">
             <label className="block space-y-1">
-              <span className="text-sm text-neutral-600">Effective from (IST)</span>
-              <input
+              <span className="text-sm text-neutral-600 dark:text-neutral-400">Effective from (IST)</span>
+              <Input
                 type="datetime-local"
                 value={effectiveFromLocal}
                 onChange={(e) => setEffectiveFromLocal(e.target.value)}
-                className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
               />
             </label>
             <label className="block flex-1 min-w-48 space-y-1">
-              <span className="text-sm text-neutral-600">Note (optional)</span>
-              <input
+              <span className="text-sm text-neutral-600 dark:text-neutral-400">Note (optional)</span>
+              <Input
                 type="text"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                className="w-full"
                 placeholder="Morning list"
               />
             </label>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm border border-neutral-300 rounded-md">
-              <thead>
-                <tr className="bg-neutral-100 text-left">
-                  <th className="px-3 py-2">Raw text</th>
-                  <th className="px-3 py-2">Product</th>
-                  <th className="px-3 py-2">Price</th>
-                  <th className="px-3 py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((line, index) => {
-                  const needsMapping = line.originalProductId === null;
-                  return (
-                    <tr key={index} className="border-t border-neutral-200 align-top">
-                      <td className="px-3 py-2 text-neutral-600 max-w-xs">{line.rawText}</td>
-                      <td className="px-3 py-2">
-                        {needsMapping ? (
-                          <div className="space-y-1">
-                            <select
-                              value={line.productId ?? ""}
-                              onChange={(e) => updateLine(index, { productId: e.target.value || null })}
-                              className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
-                            >
-                              <option value="">Select product…</option>
-                              {catalog.map((product) => (
-                                <option key={product.id} value={product.id}>
-                                  {product.name}
-                                </option>
-                              ))}
-                            </select>
-                            {line.productId && (
-                              <label className="flex items-center gap-1 text-xs text-neutral-600">
-                                <input
-                                  type="checkbox"
-                                  checked={line.rememberAlias}
-                                  onChange={(e) => updateLine(index, { rememberAlias: e.target.checked })}
-                                />
-                                Remember &quot;{line.aliasText}&quot; as {productNameById.get(line.productId)}
-                              </label>
-                            )}
-                          </div>
-                        ) : (
-                          <span>{productNameById.get(line.productId as string) ?? "Unknown"}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={line.price ?? ""}
-                          onChange={(e) =>
-                            updateLine(index, { price: e.target.value === "" ? null : Number(e.target.value) })
-                          }
-                          className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-sm"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        {line.confidence === "clean" ? (
-                          <span className="text-sm text-neutral-500">Clean</span>
-                        ) : (
-                          <span className="text-sm text-red-600">{line.flagReason ?? "Flagged"}</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Raw text</TH>
+                <TH>Product</TH>
+                <TH>Price</TH>
+                <TH>Status</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {lines.map((line, index) => {
+                const needsMapping = line.originalProductId === null;
+                return (
+                  <TR key={index} className="align-top">
+                    <TD className="text-neutral-600 dark:text-neutral-400 max-w-xs">{line.rawText}</TD>
+                    <TD>
+                      {needsMapping ? (
+                        <div className="space-y-1">
+                          <Select
+                            value={line.productId ?? ""}
+                            onChange={(e) => updateLine(index, { productId: e.target.value || null })}
+                          >
+                            <option value="">Select product…</option>
+                            {catalog.map((product) => (
+                              <option key={product.id} value={product.id}>
+                                {product.name}
+                              </option>
+                            ))}
+                          </Select>
+                          {line.productId && (
+                            <label className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                              <input
+                                type="checkbox"
+                                checked={line.rememberAlias}
+                                onChange={(e) => updateLine(index, { rememberAlias: e.target.checked })}
+                              />
+                              Remember &quot;{line.aliasText}&quot; as {productNameById.get(line.productId)}
+                            </label>
+                          )}
+                        </div>
+                      ) : (
+                        <span>{productNameById.get(line.productId as string) ?? "Unknown"}</span>
+                      )}
+                    </TD>
+                    <TD>
+                      <Input
+                        className="w-24"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={line.price ?? ""}
+                        onChange={(e) =>
+                          updateLine(index, { price: e.target.value === "" ? null : Number(e.target.value) })
+                        }
+                      />
+                    </TD>
+                    <TD>
+                      {line.confidence === "clean" ? (
+                        <span className="text-sm text-neutral-500">Clean</span>
+                      ) : (
+                        <span className="text-sm text-danger-text">{line.flagReason ?? "Flagged"}</span>
+                      )}
+                    </TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <FormError>{error}</FormError>}
           {!canPublish && (
-            <p className="text-sm text-red-600">
+            <FormError>
               {unresolvedCount} line{unresolvedCount === 1 ? "" : "s"} still need a product and a price.
-            </p>
+            </FormError>
           )}
 
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={handlePublish}
-              disabled={pending || !canPublish}
-              className="rounded-md bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
-            >
-              {pending ? "Publishing..." : "Publish"}
-            </button>
-            <button
-              type="button"
-              onClick={() => setStep("paste")}
-              className="text-sm text-neutral-500"
-            >
+          <div className="flex gap-3 items-center">
+            <Button onClick={handlePublish} disabled={!canPublish} pending={pending} pendingText="Publishing…">
+              Publish
+            </Button>
+            <Button variant="ghost" onClick={() => setStep("paste")}>
               Back to paste
-            </button>
+            </Button>
           </div>
         </div>
       )}

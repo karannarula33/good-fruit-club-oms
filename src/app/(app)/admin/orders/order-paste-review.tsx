@@ -5,6 +5,12 @@ import { useRouter } from "next/navigation";
 import { parseOrderDraft, saveOrder, type DraftLine, type SaveOrderLine } from "@/app/actions/orders";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { deriveZoneFromAddress } from "@/lib/customers/zone";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
+import { FormError } from "@/components/ui/form-error";
+import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 
 type Step = "paste" | "review";
 
@@ -162,43 +168,39 @@ export function OrderPasteReview({
       {step === "paste" && (
         <form onSubmit={handleParse} className="space-y-4">
           <label className="block space-y-1">
-            <span className="text-sm text-neutral-600">Paste the customer&apos;s order</span>
+            <span className="text-sm text-neutral-600 dark:text-neutral-400">Paste the customer&apos;s order</span>
             <textarea
               required
               rows={10}
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm font-mono"
+              className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand"
               placeholder={"Rita Parkash\n2 dozen kela\n1 kg papaya"}
             />
           </label>
           <label className="block space-y-1 max-w-xs">
-            <span className="text-sm text-neutral-600">Placed at (IST)</span>
-            <input
+            <span className="text-sm text-neutral-600 dark:text-neutral-400">Placed at (IST)</span>
+            <Input
               type="datetime-local"
               value={placedAtLocal}
               onChange={(e) => setPlacedAtLocal(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+              className="w-full"
             />
           </label>
-          {error && <p className="text-sm text-red-600">{error}</p>}
-          <button
-            type="submit"
-            disabled={pending}
-            className="rounded-md bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
-          >
-            {pending ? "Parsing..." : "Parse"}
-          </button>
+          {error && <FormError>{error}</FormError>}
+          <Button type="submit" pending={pending} pendingText="Parsing…">
+            Parse
+          </Button>
         </form>
       )}
 
       {step === "review" && (
         <div className="space-y-4">
-          <div className="rounded-md border border-neutral-300 p-3 space-y-2">
+          <Card>
             <div className="flex items-center gap-2">
               <span className="text-sm font-medium">Customer</span>
               {customerMatchConfidence === "flagged" && (
-                <span className="text-xs text-red-600">Flagged — please confirm</span>
+                <span className="text-xs text-danger-text">Flagged — please confirm</span>
               )}
               <span className="text-xs text-neutral-500">(parsed as &quot;{customerNameText}&quot;)</span>
             </div>
@@ -215,10 +217,9 @@ export function OrderPasteReview({
                 Existing customer
               </label>
               {(resolution.mode === "matched" || resolution.mode === "existing") && (
-                <select
+                <Select
                   value={resolution.customerId}
                   onChange={(e) => setResolution({ mode: "existing", customerId: e.target.value })}
-                  className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
                 >
                   {resolution.mode === "matched" && (
                     <option value={resolution.customerId}>
@@ -231,7 +232,7 @@ export function OrderPasteReview({
                       {c.phone ? ` (${c.phone})` : ""}
                     </option>
                   ))}
-                </select>
+                </Select>
               )}
             </div>
 
@@ -250,27 +251,25 @@ export function OrderPasteReview({
 
             {resolution.mode === "new" && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <input
+                <Input
                   type="text"
                   placeholder="Name"
                   value={resolution.displayName}
                   onChange={(e) => setResolution({ ...resolution, displayName: e.target.value })}
-                  className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
                 />
-                <input
+                <Input
                   type="text"
                   placeholder="Phone"
                   value={resolution.phone}
                   onChange={(e) => setResolution({ ...resolution, phone: e.target.value })}
-                  className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
                 />
                 <div className="space-y-1">
-                  <input
+                  <Input
                     type="text"
                     placeholder="Address"
                     value={resolution.address}
                     onChange={(e) => setResolution({ ...resolution, address: e.target.value })}
-                    className="w-full rounded-md border border-neutral-300 px-2 py-1 text-sm"
+                    className="w-full"
                   />
                   <p className="text-xs text-neutral-500">
                     Zone: {resolution.address ? deriveZoneFromAddress(resolution.address) : "—"}
@@ -278,145 +277,127 @@ export function OrderPasteReview({
                 </div>
               </div>
             )}
-          </div>
+          </Card>
 
           <div className="flex flex-wrap gap-4">
             <label className="block space-y-1">
-              <span className="text-sm text-neutral-600">Delivery date</span>
-              <input
-                type="date"
-                value={deliveryDate}
-                onChange={(e) => setDeliveryDate(e.target.value)}
-                className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
-              />
+              <span className="text-sm text-neutral-600 dark:text-neutral-400">Delivery date</span>
+              <Input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
             </label>
             <label className="block flex-1 min-w-48 space-y-1">
-              <span className="text-sm text-neutral-600">Notes</span>
-              <input
-                type="text"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-              />
+              <span className="text-sm text-neutral-600 dark:text-neutral-400">Notes</span>
+              <Input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full" />
             </label>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm border border-neutral-300 rounded-md">
-              <thead>
-                <tr className="bg-neutral-100 text-left">
-                  <th className="px-3 py-2">Raw text</th>
-                  <th className="px-3 py-2">Product</th>
-                  <th className="px-3 py-2">Qty</th>
-                  <th className="px-3 py-2">Unit</th>
-                  <th className="px-3 py-2">Price</th>
-                  <th className="px-3 py-2">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {lines.map((line, index) => {
-                  const needsMapping = line.originalProductId === null;
-                  return (
-                    <tr key={index} className="border-t border-neutral-200 align-top">
-                      <td className="px-3 py-2 text-neutral-600 max-w-xs">{line.rawText}</td>
-                      <td className="px-3 py-2">
-                        {needsMapping ? (
-                          <div className="space-y-1">
-                            <select
-                              value={line.productId ?? ""}
-                              onChange={(e) => updateLine(index, { productId: e.target.value || null })}
-                              className="rounded-md border border-neutral-300 px-2 py-1 text-sm"
-                            >
-                              <option value="">Select product…</option>
-                              {products.map((p) => (
-                                <option key={p.id} value={p.id}>
-                                  {p.name}
-                                </option>
-                              ))}
-                            </select>
-                            {line.productId && (
-                              <label className="flex items-center gap-1 text-xs text-neutral-600">
-                                <input
-                                  type="checkbox"
-                                  checked={line.rememberAlias}
-                                  onChange={(e) => updateLine(index, { rememberAlias: e.target.checked })}
-                                />
-                                Remember &quot;{line.aliasText}&quot; as {productNameById.get(line.productId)}
-                              </label>
-                            )}
-                          </div>
-                        ) : (
-                          <span>{productNameById.get(line.productId as string) ?? "Unknown"}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="number"
-                          step="0.001"
-                          min="0"
-                          value={line.qty ?? ""}
-                          onChange={(e) =>
-                            updateLine(index, { qty: e.target.value === "" ? null : Number(e.target.value) })
-                          }
-                          className="w-20 rounded-md border border-neutral-300 px-2 py-1 text-sm"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        <input
-                          type="text"
-                          value={line.unit ?? ""}
-                          onChange={(e) => updateLine(index, { unit: e.target.value || null })}
-                          className="w-20 rounded-md border border-neutral-300 px-2 py-1 text-sm"
-                        />
-                      </td>
-                      <td className="px-3 py-2">
-                        {line.resolvedPrice !== null ? (
-                          `₹${line.resolvedPrice.toFixed(2)}`
-                        ) : (
-                          <span className="text-red-600">No price</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {line.confidence === "clean" ? (
-                          <span className="text-sm text-neutral-500">Clean</span>
-                        ) : (
-                          <span className="text-sm text-red-600">{line.flagReason ?? "Flagged"}</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Raw text</TH>
+                <TH>Product</TH>
+                <TH>Qty</TH>
+                <TH>Unit</TH>
+                <TH>Price</TH>
+                <TH>Status</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {lines.map((line, index) => {
+                const needsMapping = line.originalProductId === null;
+                return (
+                  <TR key={index} className="align-top">
+                    <TD className="text-neutral-600 dark:text-neutral-400 max-w-xs">{line.rawText}</TD>
+                    <TD>
+                      {needsMapping ? (
+                        <div className="space-y-1">
+                          <Select
+                            value={line.productId ?? ""}
+                            onChange={(e) => updateLine(index, { productId: e.target.value || null })}
+                          >
+                            <option value="">Select product…</option>
+                            {products.map((p) => (
+                              <option key={p.id} value={p.id}>
+                                {p.name}
+                              </option>
+                            ))}
+                          </Select>
+                          {line.productId && (
+                            <label className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+                              <input
+                                type="checkbox"
+                                checked={line.rememberAlias}
+                                onChange={(e) => updateLine(index, { rememberAlias: e.target.checked })}
+                              />
+                              Remember &quot;{line.aliasText}&quot; as {productNameById.get(line.productId)}
+                            </label>
+                          )}
+                        </div>
+                      ) : (
+                        <span>{productNameById.get(line.productId as string) ?? "Unknown"}</span>
+                      )}
+                    </TD>
+                    <TD>
+                      <Input
+                        className="w-20"
+                        type="number"
+                        step="0.001"
+                        min="0"
+                        value={line.qty ?? ""}
+                        onChange={(e) =>
+                          updateLine(index, { qty: e.target.value === "" ? null : Number(e.target.value) })
+                        }
+                      />
+                    </TD>
+                    <TD>
+                      <Input
+                        className="w-20"
+                        type="text"
+                        value={line.unit ?? ""}
+                        onChange={(e) => updateLine(index, { unit: e.target.value || null })}
+                      />
+                    </TD>
+                    <TD>
+                      {line.resolvedPrice !== null ? (
+                        `₹${line.resolvedPrice.toFixed(2)}`
+                      ) : (
+                        <span className="text-danger-text">No price</span>
+                      )}
+                    </TD>
+                    <TD>
+                      {line.confidence === "clean" ? (
+                        <span className="text-sm text-neutral-500">Clean</span>
+                      ) : (
+                        <span className="text-sm text-danger-text">{line.flagReason ?? "Flagged"}</span>
+                      )}
+                    </TD>
+                  </TR>
+                );
+              })}
+            </TBody>
+          </Table>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <FormError>{error}</FormError>}
           {!canSave && (
-            <p className="text-sm text-red-600">
+            <FormError>
               {unresolvedLineCount > 0
                 ? `${unresolvedLineCount} line${unresolvedLineCount === 1 ? "" : "s"} still need a product and quantity.`
                 : "Resolve the customer before saving."}
-            </p>
+            </FormError>
           )}
           {canSave && unpricedLineCount > 0 && (
-            <p className="text-sm text-red-600">
+            <FormError>
               {unpricedLineCount} line{unpricedLineCount === 1 ? "" : "s"} have no price — order can be saved but
               cannot be billed until priced.
-            </p>
+            </FormError>
           )}
 
-          <div className="flex gap-3">
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={pending || !canSave}
-              className="rounded-md bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
-            >
-              {pending ? "Saving..." : "Save order"}
-            </button>
-            <button type="button" onClick={() => setStep("paste")} className="text-sm text-neutral-500">
+          <div className="flex gap-3 items-center">
+            <Button onClick={handleSave} disabled={!canSave} pending={pending} pendingText="Saving…">
+              Save order
+            </Button>
+            <Button variant="ghost" onClick={() => setStep("paste")}>
               Back to paste
-            </button>
+            </Button>
           </div>
         </div>
       )}

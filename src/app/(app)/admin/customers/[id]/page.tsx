@@ -1,10 +1,19 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { computeCustomerBalance, derivePaymentStatus } from "@/lib/billing/compute";
+import { computeCustomerBalance, derivePaymentStatus, type PaymentStatus } from "@/lib/billing/compute";
 import { formatIstDisplay } from "@/lib/time/ist";
+import { PageHeader } from "@/components/ui/page-header";
+import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { Badge, type BadgeTone } from "@/components/ui/badge";
+import { ORDER_STATUS_LABEL, ORDER_STATUS_TONE } from "@/lib/orders/status-display";
 import { RecordPaymentForm } from "./record-payment-form";
+
+const PAYMENT_STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
+  paid: "success",
+  partial: "warning",
+  unpaid: "danger",
+};
 
 export default async function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   await requireRole(["admin"]);
@@ -74,111 +83,103 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <Link href="/admin/customers" className="text-sm underline text-neutral-500">
-          ← Customers
-        </Link>
-        <h1 className="text-xl font-semibold">{customer.display_name}</h1>
-        <p className="text-neutral-600">
-          {customer.phone ?? "No phone"} · {customer.address} · {customer.zone}
-        </p>
-        <p className="text-lg font-medium mt-2">
-          Balance:{" "}
-          {balance > 0 ? (
-            <span className="text-red-600">₹{balance.toFixed(2)} owed</span>
-          ) : balance < 0 ? (
-            <span className="text-green-700">₹{Math.abs(balance).toFixed(2)} advance</span>
-          ) : (
-            <span className="text-neutral-600">₹0</span>
-          )}
-        </p>
-      </div>
+      <PageHeader
+        title={customer.display_name}
+        backHref="/admin/customers"
+        backLabel="Customers"
+        subtitle={
+          <>
+            {customer.phone ?? "No phone"} · {customer.address} · {customer.zone}
+            <br />
+            <span className="text-base font-medium text-foreground">
+              Balance:{" "}
+              {balance > 0 ? (
+                <span className="text-danger-text">₹{balance.toFixed(2)} owed</span>
+              ) : balance < 0 ? (
+                <span className="text-success-text">₹{Math.abs(balance).toFixed(2)} advance</span>
+              ) : (
+                <span className="text-neutral-600 dark:text-neutral-400">₹0</span>
+              )}
+            </span>
+          </>
+        }
+      />
 
       <div className="space-y-2">
         <h2 className="text-lg font-semibold">Orders</h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm border border-neutral-300 rounded-md">
-            <thead>
-              <tr className="bg-neutral-100 text-left">
-                <th className="px-3 py-2">Delivery date</th>
-                <th className="px-3 py-2">Order status</th>
-                <th className="px-3 py-2">Bill total</th>
-                <th className="px-3 py-2">Paid</th>
-                <th className="px-3 py-2">Remaining due</th>
-                <th className="px-3 py-2">Payment status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {orderRows.map((order) => (
-                <tr key={order.id} className="border-t border-neutral-200">
-                  <td className="px-3 py-2">{order.deliveryDate}</td>
-                  <td className="px-3 py-2 text-neutral-600">{order.status}</td>
-                  <td className="px-3 py-2">{order.total !== null ? `₹${order.total.toFixed(2)}` : "Not billed"}</td>
-                  <td className="px-3 py-2">{order.total !== null ? `₹${order.allocated.toFixed(2)}` : "—"}</td>
-                  <td className="px-3 py-2">
-                    {order.remainingDue !== null ? `₹${order.remainingDue.toFixed(2)}` : "—"}
-                  </td>
-                  <td className="px-3 py-2">
-                    {order.paymentStatus && (
-                      <span
-                        className={
-                          order.paymentStatus === "paid"
-                            ? "text-green-700"
-                            : order.paymentStatus === "partial"
-                              ? "text-amber-600"
-                              : "text-red-600"
-                        }
-                      >
-                        {order.paymentStatus}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <THead>
+            <TR>
+              <TH>Delivery date</TH>
+              <TH>Order status</TH>
+              <TH>Bill total</TH>
+              <TH>Paid</TH>
+              <TH>Remaining due</TH>
+              <TH>Payment status</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {orderRows.map((order) => (
+              <TR key={order.id}>
+                <TD>{order.deliveryDate}</TD>
+                <TD>
+                  <Badge tone={ORDER_STATUS_TONE[order.status]} size="sm">
+                    {ORDER_STATUS_LABEL[order.status]}
+                  </Badge>
+                </TD>
+                <TD>{order.total !== null ? `₹${order.total.toFixed(2)}` : "Not billed"}</TD>
+                <TD>{order.total !== null ? `₹${order.allocated.toFixed(2)}` : "—"}</TD>
+                <TD>{order.remainingDue !== null ? `₹${order.remainingDue.toFixed(2)}` : "—"}</TD>
+                <TD>
+                  {order.paymentStatus && (
+                    <Badge tone={PAYMENT_STATUS_TONE[order.paymentStatus]} size="sm">
+                      {order.paymentStatus}
+                    </Badge>
+                  )}
+                </TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
       </div>
 
       <RecordPaymentForm customerId={customer.id} outstandingOrders={outstandingOrders} />
 
       <div className="space-y-2">
         <h2 className="text-lg font-semibold">Ledger history</h2>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm border border-neutral-300 rounded-md">
-            <thead>
-              <tr className="bg-neutral-100 text-left">
-                <th className="px-3 py-2">Date</th>
-                <th className="px-3 py-2">Type</th>
-                <th className="px-3 py-2">Amount</th>
-                <th className="px-3 py-2">Mode</th>
-                <th className="px-3 py-2">Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(ledgerEntries ?? []).map((entry) => (
-                <tr key={entry.id} className="border-t border-neutral-200">
-                  <td className="px-3 py-2 text-neutral-600">{formatIstDisplay(new Date(entry.created_at))}</td>
-                  <td className="px-3 py-2">
-                    <span className={entry.entry_type === "debit" ? "text-red-600" : "text-green-700"}>
-                      {entry.entry_type}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2">₹{entry.amount.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-neutral-600">{entry.mode ?? "—"}</td>
-                  <td className="px-3 py-2 text-neutral-600">{entry.note ?? "—"}</td>
-                </tr>
-              ))}
-              {(ledgerEntries ?? []).length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-3 py-2 text-neutral-500">
-                    No ledger activity yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <Table>
+          <THead>
+            <TR>
+              <TH>Date</TH>
+              <TH>Type</TH>
+              <TH>Amount</TH>
+              <TH>Mode</TH>
+              <TH>Note</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {(ledgerEntries ?? []).map((entry) => (
+              <TR key={entry.id}>
+                <TD className="text-neutral-600 dark:text-neutral-400">{formatIstDisplay(new Date(entry.created_at))}</TD>
+                <TD>
+                  <Badge tone={entry.entry_type === "debit" ? "danger" : "success"} size="sm">
+                    {entry.entry_type}
+                  </Badge>
+                </TD>
+                <TD>₹{entry.amount.toFixed(2)}</TD>
+                <TD className="text-neutral-600 dark:text-neutral-400">{entry.mode ?? "—"}</TD>
+                <TD className="text-neutral-600 dark:text-neutral-400">{entry.note ?? "—"}</TD>
+              </TR>
+            ))}
+            {(ledgerEntries ?? []).length === 0 && (
+              <TR>
+                <TD colSpan={5} className="text-neutral-500">
+                  No ledger activity yet.
+                </TD>
+              </TR>
+            )}
+          </TBody>
+        </Table>
       </div>
     </div>
   );

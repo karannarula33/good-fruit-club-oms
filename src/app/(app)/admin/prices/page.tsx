@@ -4,6 +4,8 @@ import { resolvePrices } from "@/lib/pricing/resolve";
 import { loadPriceItemRecords } from "@/lib/pricing/load";
 import { loadCatalogEntries } from "@/lib/catalog/load";
 import { formatIstDisplay } from "@/lib/time/ist";
+import { PageHeader } from "@/components/ui/page-header";
+import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { PricePasteReview } from "./price-paste-review";
 
 export default async function AdminPricesPage() {
@@ -21,44 +23,38 @@ export default async function AdminPricesPage() {
 
   return (
     <div className="p-6 space-y-8">
-      <div>
-        <h1 className="text-xl font-semibold">Prices</h1>
-        <p className="text-neutral-600">
-          Paste today&apos;s price list to publish a new version, or review the active prices below.
-        </p>
-      </div>
+      <PageHeader
+        title="Prices"
+        subtitle="Paste today's price list to publish a new version, or review the active prices below."
+      />
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm border border-neutral-300 rounded-md">
-          <thead>
-            <tr className="bg-neutral-100 text-left">
-              <th className="px-3 py-2">Product</th>
-              <th className="px-3 py-2">Unit</th>
-              <th className="px-3 py-2">Price</th>
-              <th className="px-3 py-2">As of</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(products ?? []).map((product) => {
-              const price = resolved.get(product.id);
-              return (
-                <tr key={product.id} className="border-t border-neutral-200">
-                  <td className="px-3 py-2">{product.name}</td>
-                  <td className="px-3 py-2 text-neutral-600">{product.unit_label ?? product.unit_type}</td>
-                  <td className="px-3 py-2">
-                    {price ? `₹${price.pricePerUnit.toFixed(2)}` : (
-                      <span className="text-red-600">Not yet priced</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 text-neutral-600">
-                    {price ? formatIstDisplay(price.effectiveFrom) : "—"}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <Table>
+        <THead>
+          <TR>
+            <TH>Product</TH>
+            <TH>Unit</TH>
+            <TH>Price</TH>
+            <TH>As of</TH>
+          </TR>
+        </THead>
+        <TBody>
+          {(products ?? []).map((product) => {
+            const price = resolved.get(product.id);
+            return (
+              <TR key={product.id}>
+                <TD>{product.name}</TD>
+                <TD className="text-neutral-600 dark:text-neutral-400">{product.unit_label ?? product.unit_type}</TD>
+                <TD>
+                  {price ? `₹${price.pricePerUnit.toFixed(2)}` : <span className="text-danger-text">Not yet priced</span>}
+                </TD>
+                <TD className="text-neutral-600 dark:text-neutral-400">
+                  {price ? formatIstDisplay(price.effectiveFrom) : "—"}
+                </TD>
+              </TR>
+            );
+          })}
+        </TBody>
+      </Table>
 
       <PricePasteReview catalog={catalog} />
     </div>

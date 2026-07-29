@@ -1,29 +1,29 @@
-import Link from "next/link";
+import { ClipboardList, Truck, Tag, Users, Activity } from "lucide-react";
 import { requireRole } from "@/lib/auth/require-role";
+import { PageHeader } from "@/components/ui/page-header";
+import { Button } from "@/components/ui/button";
+
+const LINKS = [
+  { href: "/admin/orders", label: "Order Entry", icon: ClipboardList },
+  { href: "/admin/procurement", label: "Procurement", icon: Truck },
+  { href: "/admin/prices", label: "Prices", icon: Tag },
+  { href: "/admin/customers", label: "Customers", icon: Users },
+  { href: "/status", label: "Status board", icon: Activity },
+];
 
 export default async function AdminPage() {
   const profile = await requireRole(["admin"]);
 
   return (
-    <div className="p-6 space-y-4">
-      <h1 className="text-xl font-semibold">Admin</h1>
-      <p className="text-neutral-600">Welcome, {profile.full_name || profile.phone}.</p>
-      <div className="flex flex-wrap gap-4">
-        <Link href="/admin/orders" className="text-sm underline text-neutral-900">
-          Order Entry
-        </Link>
-        <Link href="/admin/procurement" className="text-sm underline text-neutral-900">
-          Procurement
-        </Link>
-        <Link href="/admin/prices" className="text-sm underline text-neutral-900">
-          Prices
-        </Link>
-        <Link href="/admin/customers" className="text-sm underline text-neutral-900">
-          Customers
-        </Link>
-        <Link href="/status" className="text-sm underline text-neutral-900">
-          Status board
-        </Link>
+    <div className="p-6 space-y-6">
+      <PageHeader title="Admin" subtitle={`Welcome, ${profile.full_name || profile.phone}.`} />
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        {LINKS.map(({ href, label, icon: Icon }) => (
+          <Button key={href} href={href} variant="outline" size="lg" className="justify-start">
+            <Icon className="size-5" aria-hidden="true" />
+            {label}
+          </Button>
+        ))}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
+import { PageHeader } from "@/components/ui/page-header";
 import { OrderPasteReview } from "./order-paste-review";
 
 export default async function AdminOrdersPage() {
@@ -13,10 +14,7 @@ export default async function AdminOrdersPage() {
 
   return (
     <div className="p-6 space-y-4">
-      <div>
-        <h1 className="text-xl font-semibold">Order Entry</h1>
-        <p className="text-neutral-600">Paste a customer&apos;s WhatsApp order to parse, review, and save it.</p>
-      </div>
+      <PageHeader title="Order Entry" subtitle="Paste a customer's WhatsApp order to parse, review, and save it." />
 
       <OrderPasteReview
         customers={(customers ?? []).map((c) => ({ id: c.id, name: c.display_name, phone: c.phone }))}

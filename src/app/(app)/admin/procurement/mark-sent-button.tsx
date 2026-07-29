@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { markListSent } from "@/app/actions/procurement";
+import { Button } from "@/components/ui/button";
+import { FormError } from "@/components/ui/form-error";
 
 export function MarkSentButton({ deliveryDate }: { deliveryDate: string }) {
   const router = useRouter();
@@ -23,15 +25,10 @@ export function MarkSentButton({ deliveryDate }: { deliveryDate: string }) {
 
   return (
     <div className="space-y-1">
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={pending}
-        className="rounded-md bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-50"
-      >
-        {pending ? "Marking..." : "Mark list sent to vendor"}
-      </button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      <Button size="sm" onClick={handleClick} pending={pending} pendingText="Marking…">
+        Mark list sent to vendor
+      </Button>
+      {error && <FormError>{error}</FormError>}
     </div>
   );
 }

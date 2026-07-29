@@ -3,6 +3,10 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { aggregateProcurement, type ProcurementLine } from "@/lib/procurement/aggregate";
 import { formatIstDisplay, utcToIstDatetimeLocal } from "@/lib/time/ist";
+import { PageHeader } from "@/components/ui/page-header";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { MarkSentButton } from "./mark-sent-button";
 
 function addDays(dateStr: string, days: number): string {
@@ -20,24 +24,24 @@ function ProcurementTable({
     return <p className="text-sm text-neutral-500">Nothing here.</p>;
   }
   return (
-    <table className="min-w-full text-sm border border-neutral-300 rounded-md">
-      <thead>
-        <tr className="bg-neutral-100 text-left">
-          <th className="px-3 py-2">Product</th>
-          <th className="px-3 py-2">Unit</th>
-          <th className="px-3 py-2">Qty</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <THead>
+        <TR>
+          <TH>Product</TH>
+          <TH>Unit</TH>
+          <TH>Qty</TH>
+        </TR>
+      </THead>
+      <TBody>
         {rows.map((row) => (
-          <tr key={row.name} className="border-t border-neutral-200">
-            <td className="px-3 py-2">{row.name}</td>
-            <td className="px-3 py-2 text-neutral-600">{row.unitLabel ?? "—"}</td>
-            <td className="px-3 py-2">{row.qty}</td>
-          </tr>
+          <TR key={row.name}>
+            <TD>{row.name}</TD>
+            <TD className="text-neutral-600 dark:text-neutral-400">{row.unitLabel ?? "—"}</TD>
+            <TD>{row.qty}</TD>
+          </TR>
         ))}
-      </tbody>
-    </table>
+      </TBody>
+    </Table>
   );
 }
 
@@ -96,26 +100,26 @@ export default async function AdminProcurementPage({
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-xl font-semibold">Procurement</h1>
-          <p className="text-neutral-600">Base list vs extras for a delivery date.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <Link href={`/admin/procurement?date=${addDays(date, -1)}`} className="text-sm underline">
-            ← Prev day
-          </Link>
-          <form>
-            <input type="date" name="date" defaultValue={date} className="rounded-md border border-neutral-300 px-2 py-1 text-sm" />
-          </form>
-          <Link href={`/admin/procurement?date=${addDays(date, 1)}`} className="text-sm underline">
-            Next day →
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title="Procurement"
+        subtitle="Base list vs extras for a delivery date."
+        action={
+          <div className="flex items-center gap-3">
+            <Link href={`/admin/procurement?date=${addDays(date, -1)}`} className="text-sm underline">
+              ← Prev day
+            </Link>
+            <form>
+              <Input type="date" name="date" defaultValue={date} size="sm" />
+            </form>
+            <Link href={`/admin/procurement?date=${addDays(date, 1)}`} className="text-sm underline">
+              Next day →
+            </Link>
+          </div>
+        }
+      />
 
-      <div className="rounded-md border border-neutral-300 p-3 flex items-center justify-between flex-wrap gap-3">
-        <p className="text-sm text-neutral-700">
+      <Card className="flex items-center justify-between flex-wrap gap-3">
+        <p className="text-sm text-neutral-700 dark:text-neutral-300">
           {listSentAt ? (
             <>
               Sent to vendor at {formatIstDisplay(listSentAt)}
@@ -126,7 +130,7 @@ export default async function AdminProcurementPage({
           )}
         </p>
         {!listSentAt && <MarkSentButton deliveryDate={date} />}
-      </div>
+      </Card>
 
       <div className="space-y-2">
         <h2 className="text-lg font-semibold">Base list</h2>
@@ -134,7 +138,7 @@ export default async function AdminProcurementPage({
       </div>
 
       <div className="space-y-2">
-        <h2 className="text-lg font-semibold text-red-700">Extras</h2>
+        <h2 className="text-lg font-semibold text-danger-text">Extras</h2>
         <ProcurementTable rows={toRows(extras)} />
       </div>
     </div>

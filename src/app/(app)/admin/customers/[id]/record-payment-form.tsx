@@ -3,6 +3,10 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { recordPayment } from "@/app/actions/ledger";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+import { FormError } from "@/components/ui/form-error";
 import type { LedgerMode } from "@/lib/supabase/database.types";
 
 interface OutstandingOrder {
@@ -93,48 +97,41 @@ export function RecordPaymentForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3 border border-neutral-300 rounded-md p-4">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-3 rounded-lg border border-neutral-300 dark:border-neutral-700 p-3"
+    >
       <h2 className="text-lg font-semibold">Record payment</h2>
 
       <div className="flex flex-wrap gap-3">
-        <label className="flex flex-col text-sm">
+        <label className="flex flex-col text-sm gap-1">
           Amount (₹)
-          <input
+          <Input
             type="number"
             inputMode="decimal"
             step="0.01"
             min="0"
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            className="border border-neutral-300 rounded px-2 py-1"
           />
         </label>
-        <label className="flex flex-col text-sm">
+        <label className="flex flex-col text-sm gap-1">
           Mode
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value as LedgerMode)}
-            className="border border-neutral-300 rounded px-2 py-1"
-          >
+          <Select value={mode} onChange={(e) => setMode(e.target.value as LedgerMode)}>
             <option value="cash">Cash</option>
             <option value="upi">UPI</option>
             <option value="other">Other</option>
-          </select>
+          </Select>
         </label>
-        <label className="flex flex-col text-sm flex-1 min-w-[10rem]">
+        <label className="flex flex-col text-sm gap-1 flex-1 min-w-[10rem]">
           Note
-          <input
-            type="text"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            className="border border-neutral-300 rounded px-2 py-1"
-          />
+          <Input type="text" value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
       </div>
 
       {outstandingOrders.length > 0 && (
         <div className="space-y-1">
-          <p className="text-sm text-neutral-600">
+          <p className="text-sm text-neutral-600 dark:text-neutral-400">
             Allocate to outstanding orders (leave unchecked to record as an advance):
           </p>
           {outstandingOrders.map((order) => (
@@ -145,9 +142,10 @@ export function RecordPaymentForm({
                 onChange={(e) => toggleOrder(order, e.target.checked)}
               />
               <span className="w-28">{order.deliveryDate}</span>
-              <span className="text-neutral-600 w-32">Due ₹{order.remainingDue.toFixed(2)}</span>
+              <span className="text-neutral-600 dark:text-neutral-400 w-32">Due ₹{order.remainingDue.toFixed(2)}</span>
               {checked[order.id] && (
-                <input
+                <Input
+                  className="w-24"
                   type="number"
                   inputMode="decimal"
                   step="0.01"
@@ -156,7 +154,6 @@ export function RecordPaymentForm({
                   onChange={(e) =>
                     setAllocationAmounts((prev) => ({ ...prev, [order.id]: e.target.value }))
                   }
-                  className="border border-neutral-300 rounded px-2 py-1 w-24"
                 />
               )}
             </div>
@@ -165,7 +162,7 @@ export function RecordPaymentForm({
       )}
 
       {validAmount && (
-        <p className="text-sm text-neutral-600">
+        <p className="text-sm text-neutral-600 dark:text-neutral-400">
           {remainder > 0
             ? `₹${remainder.toFixed(2)} will be recorded as an advance.`
             : remainder < 0
@@ -174,15 +171,11 @@ export function RecordPaymentForm({
         </p>
       )}
 
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <FormError>{error}</FormError>}
 
-      <button
-        type="submit"
-        disabled={isPending || !validAmount || remainder < 0}
-        className="bg-neutral-900 text-white rounded px-4 py-2 text-sm disabled:opacity-50"
-      >
-        {isPending ? "Recording…" : "Record payment"}
-      </button>
+      <Button type="submit" disabled={!validAmount || remainder < 0} pending={isPending} pendingText="Recording…">
+        Record payment
+      </Button>
     </form>
   );
 }

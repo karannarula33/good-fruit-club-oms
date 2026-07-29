@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { updateCustomerZone } from "@/app/actions/customers";
+import { Select } from "@/components/ui/select";
+import { FormError } from "@/components/ui/form-error";
 import { ZONE_ORDER, type Zone } from "@/lib/customers/zone";
 
 const ALL_ZONES: Zone[] = [...ZONE_ORDER, "Unassigned"];
@@ -27,21 +29,19 @@ export function ZoneSelect({ customerId, zone }: { customerId: string; zone: Zon
 
   return (
     <div className="space-y-1">
-      <select
+      <Select
         defaultValue={zone}
         onChange={handleChange}
         disabled={pending}
-        className={`rounded-md border px-2 py-1 text-sm ${
-          zone === "Unassigned" ? "border-red-400 text-red-700" : "border-neutral-300"
-        }`}
+        className={zone === "Unassigned" ? "border-danger text-danger-text" : ""}
       >
         {ALL_ZONES.map((z) => (
           <option key={z} value={z}>
             {z}
           </option>
         ))}
-      </select>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      </Select>
+      {error && <FormError>{error}</FormError>}
     </div>
   );
 }
