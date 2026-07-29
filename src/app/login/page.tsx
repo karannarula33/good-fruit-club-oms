@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Apple } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toE164 } from "@/lib/phone";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { FormError } from "@/components/ui/form-error";
 
 export default function LoginPage() {
@@ -36,44 +34,39 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center p-6">
-      <div className="w-full max-w-sm space-y-6">
-        <h1 className="flex items-center gap-2 text-xl font-semibold">
-          <Apple className="size-6 text-brand" aria-hidden="true" />
-          Good Fruit Club
-        </h1>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <label className="block space-y-1">
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">Phone number</span>
-            <Input
-              type="tel"
-              inputMode="tel"
-              required
-              autoFocus
-              placeholder="98765 43210"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full text-base"
-            />
-          </label>
-          <label className="block space-y-1">
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">Password</span>
-            <Input
-              type="password"
-              required
-              placeholder="••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full text-base"
-            />
-          </label>
-          {error && <FormError>{error}</FormError>}
-          <Button type="submit" fullWidth pending={pending} pendingText="Signing in…">
-            Sign in
-          </Button>
-        </form>
+    <div className="flex min-h-dvh flex-col items-center justify-center gap-6 bg-background px-7 py-8">
+      <div className="flex flex-col items-center gap-1.5">
+        <span className="flex size-14 items-center justify-center rounded-[18px] bg-foreground font-display text-[22px] font-extrabold text-white">
+          GF
+        </span>
+        <span className="mt-1.5 font-display text-[22px] font-bold text-foreground">Good Fruit Club</span>
+        <span className="font-sans text-[12.5px] font-medium text-muted">Internal OMS</span>
       </div>
+
+      <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-3.5">
+        <input
+          type="tel"
+          inputMode="tel"
+          required
+          autoFocus
+          placeholder="Phone number"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          className="w-full rounded-2xl border-[1.5px] border-[#ECEAE3] bg-[#F7F7F5] px-4 py-[15px] text-center font-sans text-[15px] font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-brand"
+        />
+        <input
+          type="password"
+          required
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full rounded-2xl border-[1.5px] border-[#ECEAE3] bg-[#F7F7F5] px-4 py-[15px] text-center font-sans text-[15px] font-semibold text-foreground focus:outline-none focus:ring-2 focus:ring-brand"
+        />
+        {error && <FormError>{error}</FormError>}
+        <Button type="submit" variant="dark" fullWidth pending={pending} pendingText="Signing in…">
+          Log In
+        </Button>
+      </form>
     </div>
   );
 }

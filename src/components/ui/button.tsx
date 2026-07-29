@@ -10,21 +10,26 @@ const MotionLink = motion.create(Link);
 const TAP_ANIMATION = { scale: 0.96 };
 const TAP_TRANSITION = { type: "spring", stiffness: 500, damping: 30 } as const;
 
-export type ButtonVariant = "primary" | "secondary" | "outline" | "ghost" | "destructive";
+// "dark" (ink) is the first-commit CTA (Parse Message, Pack & Close, Dispatch,
+// Log In); "primary" is the forward-moving accent CTA (Confirm & Send, Publish,
+// Generate Bill, Mark Delivered) -- naming/mapping per the design handoff's own
+// "Ink/dark CTA" vs "Accent (primary action color)" distinction.
+export type ButtonVariant = "primary" | "dark" | "secondary" | "outline" | "ghost" | "destructive";
 export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANT_CLASS: Record<ButtonVariant, string> = {
   primary: "bg-brand text-brand-foreground hover:bg-brand-hover",
+  dark: "bg-foreground text-white hover:opacity-90",
   secondary: "bg-neutral-bg text-neutral-text hover:brightness-95",
-  outline: "border border-neutral-300 text-neutral-900 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-100 dark:hover:bg-neutral-900",
-  ghost: "text-neutral-600 underline hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100 px-0 py-0",
-  destructive: "bg-danger text-white hover:opacity-90",
+  outline: "border border-[#ECEAE3] text-foreground hover:bg-neutral-bg",
+  ghost: "text-brand hover:opacity-80",
+  destructive: "bg-danger-bg text-danger-text hover:brightness-95",
 };
 
 const SIZE_CLASS: Record<ButtonSize, string> = {
-  sm: "px-3 py-1.5 text-sm",
-  md: "px-4 py-2 text-sm",
-  lg: "px-4 py-3 text-lg",
+  sm: "px-3 py-1.5 text-sm rounded-xl",
+  md: "px-4 py-2.5 text-sm rounded-xl",
+  lg: "px-[18px] py-[18px] text-base rounded-2xl",
 };
 
 interface SharedProps {
@@ -54,7 +59,7 @@ type ButtonAsLink = SharedProps &
 export function Button(props: ButtonAsButton | ButtonAsLink) {
   const {
     variant = "primary",
-    size = "md",
+    size = "lg",
     fullWidth = false,
     pill = false,
     pending = false,
@@ -65,10 +70,10 @@ export function Button(props: ButtonAsButton | ButtonAsLink) {
   } = props;
 
   const classes = cn(
-    "inline-flex items-center justify-center gap-2 font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none",
-    pill ? "rounded-full" : "rounded-md",
+    "inline-flex items-center justify-center gap-2 font-sans font-extrabold transition-colors disabled:opacity-50 disabled:pointer-events-none",
+    variant === "ghost" ? "px-0 py-0" : SIZE_CLASS[size],
+    pill && "!rounded-full",
     VARIANT_CLASS[variant],
-    variant !== "ghost" && SIZE_CLASS[size],
     fullWidth && "w-full",
     className,
   );

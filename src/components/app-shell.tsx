@@ -2,33 +2,36 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Apple, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
 import { cn } from "@/lib/cn";
 import type { Role } from "@/lib/supabase/database.types";
 
 const ROLE_HOME: Record<Role, string> = {
-  admin: "/admin",
+  admin: "/admin/orders",
   packer: "/packer",
   delivery: "/delivery",
 };
 
-const NAV_LINKS: Record<Role, { href: string; label: string }[]> = {
+// Matches the design handoff's "Navigation Shell" table exactly -- label
+// text and tab order are part of the spec, not incidental.
+const TABS: Record<Role, { href: string; label: string }[]> = {
   admin: [
-    { href: "/admin", label: "Dashboard" },
-    { href: "/admin/orders", label: "Order Entry" },
-    { href: "/admin/procurement", label: "Procurement" },
+    { href: "/admin/orders", label: "Orders" },
+    { href: "/packer", label: "Packing" },
+    { href: "/admin/procurement", label: "Procure" },
     { href: "/admin/prices", label: "Prices" },
-    { href: "/admin/customers", label: "Customers" },
-    { href: "/status", label: "Status board" },
+    { href: "/delivery", label: "Route" },
+    { href: "/status", label: "Status" },
+    { href: "/admin/customers", label: "Ledger" },
   ],
   packer: [
     { href: "/packer", label: "Packing" },
-    { href: "/status", label: "Status board" },
+    { href: "/status", label: "Status" },
   ],
   delivery: [
-    { href: "/delivery", label: "Delivery route" },
-    { href: "/status", label: "Status board" },
+    { href: "/delivery", label: "Route" },
+    { href: "/status", label: "Status" },
   ],
 };
 
@@ -40,55 +43,58 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const links = NAV_LINKS[profile.role];
+  const tabs = TABS[profile.role];
+  const many = tabs.length > 2;
 
   return (
-    <div className="min-h-dvh flex flex-col">
-      <header className="border-b border-neutral-200 dark:border-neutral-800">
-        <div className="flex items-center gap-4 px-4 py-2">
-          <Link href={ROLE_HOME[profile.role]} className="flex items-center gap-1.5 shrink-0 font-semibold">
-            <Apple className="size-5 text-brand" aria-hidden="true" />
-            <span className="hidden sm:inline">Good Fruit Club</span>
-          </Link>
+    <div className="min-h-dvh flex flex-col bg-background">
+      <div className="flex items-center justify-between px-4 py-2.5">
+        <Link href={ROLE_HOME[profile.role]} className="flex items-center gap-2">
+          <span className="flex size-8 items-center justify-center rounded-xl bg-foreground font-display text-sm font-extrabold text-white">
+            GF
+          </span>
+          <span className="font-display text-sm font-bold text-foreground">Good Fruit Club</span>
+        </Link>
+        <form action={signOut}>
+          <button
+            type="submit"
+            title="Sign out"
+            className="rounded-full p-2 text-muted hover:bg-neutral-bg hover:text-foreground"
+          >
+            <LogOut className="size-4" aria-hidden="true" />
+          </button>
+        </form>
+      </div>
 
-          <nav className="flex-1 flex items-center gap-1 overflow-x-auto">
-            {links.map((link) => {
-              const active = pathname === link.href;
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "shrink-0 rounded-md px-3 py-1.5 text-sm font-medium whitespace-nowrap",
-                    active
-                      ? "bg-brand text-brand-foreground"
-                      : "text-neutral-600 hover:bg-neutral-bg dark:text-neutral-400",
-                  )}
-                >
-                  {link.label}
-                </Link>
-              );
-            })}
-          </nav>
+      <main className="flex-1 overflow-y-auto pb-[calc(64px+env(safe-area-inset-bottom,0px))]">
+        {children}
+      </main>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="hidden md:inline text-sm text-neutral-500">
-              {profile.fullName || profile.phone}
-            </span>
-            <form action={signOut}>
-              <button
-                type="submit"
-                title="Sign out"
-                className="rounded-md p-2 text-neutral-500 hover:bg-neutral-bg hover:text-neutral-900 dark:hover:text-neutral-100"
-              >
-                <LogOut className="size-4" aria-hidden="true" />
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1">{children}</main>
+      <nav
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-50 flex border-t border-[#ECEAE3] bg-white px-1 pt-2",
+          many && "overflow-x-auto gap-0.5",
+        )}
+        style={{ paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))" }}
+      >
+        {tabs.map((tab) => {
+          const active = pathname === tab.href;
+          return (
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className={cn(
+                "flex flex-col items-center gap-1 px-2 py-1.5 font-sans text-[10.5px] font-bold",
+                many ? "shrink-0 min-w-16" : "flex-1",
+                active ? "text-foreground" : "text-tertiary",
+              )}
+            >
+              <span className={cn("size-[5px] rounded-full", active ? "bg-brand" : "bg-transparent")} />
+              {tab.label}
+            </Link>
+          );
+        })}
+      </nav>
     </div>
   );
 }

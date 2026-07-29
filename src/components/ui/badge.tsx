@@ -18,15 +18,20 @@ const TONE_CLASS: Record<BadgeTone, string> = {
 // `key={order.status}`) so a remount plays this pulse -- that's what makes
 // a live status change (Realtime, optimistic update) visibly announce
 // itself instead of silently swapping color.
+// `style` lets a caller pass an exact bg/fg pair (e.g. the design's literal
+// per-order-status hex pairs in src/lib/orders/status-display.ts) without
+// forcing every color into the generic `tone` palette.
 export function Badge({
   tone = "neutral",
   size = "md",
   className,
+  style,
   children,
 }: {
   tone?: BadgeTone;
   size?: "sm" | "md";
   className?: string;
+  style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
   return (
@@ -34,10 +39,11 @@ export function Badge({
       initial={{ scale: 1.2, opacity: 0.6 }}
       animate={{ scale: 1, opacity: 1 }}
       transition={{ type: "spring", stiffness: 400, damping: 20 }}
+      style={style}
       className={cn(
-        "inline-flex items-center rounded-full font-medium whitespace-nowrap",
-        size === "sm" ? "px-2 py-0.5 text-xs" : "px-3 py-1 text-sm",
-        TONE_CLASS[tone],
+        "inline-flex items-center rounded-full font-sans font-bold whitespace-nowrap",
+        size === "sm" ? "px-2.5 py-1 text-[10px] uppercase tracking-wide" : "px-3 py-1.5 text-xs",
+        !style && TONE_CLASS[tone],
         className,
       )}
     >
