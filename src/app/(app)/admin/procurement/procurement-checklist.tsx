@@ -8,6 +8,7 @@ import { buildProcurementMessage } from "@/lib/procurement/message";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { FormError } from "@/components/ui/form-error";
 import { useToast } from "@/components/ui/toast";
 import { cn } from "@/lib/cn";
@@ -38,6 +39,7 @@ export function ProcurementChecklist({ date, rows }: { date: string; rows: Procu
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [previewText, setPreviewText] = useState<string | null>(null);
 
   function toggleSelected(productId: string, checked: boolean) {
     setSelected((prev) => {
@@ -67,14 +69,18 @@ export function ProcurementChecklist({ date, rows }: { date: string; rows: Procu
     });
   }
 
-  function handleWhatsApp() {
+  function openPreview() {
     const text = buildProcurementMessage(
       date,
       selectedRows.map((row) => ({ name: row.name, qty: row.totalQty, unitLabel: row.unitLabel })),
     );
-    navigator.clipboard.writeText(text).catch(() => {});
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
-    showToast("Copied — opening WhatsApp");
+    setPreviewText(text);
+  }
+
+  function handleCopy() {
+    if (!previewText) return;
+    navigator.clipboard.writeText(previewText).catch(() => {});
+    showToast("Copied ✓");
   }
 
   if (rows.length === 0) {
@@ -140,12 +146,36 @@ export function ProcurementChecklist({ date, rows }: { date: string; rows: Procu
         >
           Mark sent to vendor{selected.size > 0 ? ` (${selected.size})` : ""}
         </Button>
-        <Button variant="outline" fullWidth onClick={handleWhatsApp} disabled={selected.size === 0}>
+        <Button variant="outline" fullWidth onClick={openPreview} disabled={selected.size === 0}>
           <MessageCircle className="size-5" aria-hidden="true" />
-          Copy as WhatsApp message
+          WhatsApp message
         </Button>
         {error && <FormError>{error}</FormError>}
       </div>
+
+      <BottomSheet open={previewText !== null} onClose={() => setPreviewText(null)}>
+        <div className="flex flex-col gap-3">
+          <div className="font-sans text-[11px] font-bold uppercase tracking-wide text-muted">
+            Procurement message
+          </div>
+          <div className="rounded-2xl rounded-bl-[4px] bg-[#DCF3D5] p-4">
+            <div className="whitespace-pre-wrap font-sans text-[13.5px] leading-[1.7] text-foreground">
+              {previewText}
+            </div>
+          </div>
+          <Button variant="secondary" fullWidth onClick={handleCopy}>
+            Copy
+          </Button>
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(previewText ?? "")}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 rounded-2xl bg-success px-4 py-[18px] font-sans text-base font-extrabold text-white"
+          >
+            <MessageCircle className="size-5" /> Send on WhatsApp →
+          </a>
+        </div>
+      </BottomSheet>
     </div>
   );
 }
