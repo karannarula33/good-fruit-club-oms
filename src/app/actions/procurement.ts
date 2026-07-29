@@ -4,23 +4,35 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 
-export async function markListSent(
+export async function toggleProcurementItemCheck(
   deliveryDate: string,
+  productId: string,
+  checked: boolean,
+  currentQty: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const profile = await requireRole(["admin"]);
 
   const supabase = await createClient();
-  const { error } = await supabase.from("procurement_marks").insert({
-    delivery_date: deliveryDate,
-    list_sent_at: new Date().toISOString(),
-    sent_by: profile.id,
-  });
 
-  if (error) {
-    if (error.code === "23505") {
-      return { ok: false, error: "Already marked sent for this delivery date." };
-    }
-    return { ok: false, error: error.message };
+  if (checked) {
+    const { error } = await supabase.from("procurement_item_checks").upsert(
+      {
+        delivery_date: deliveryDate,
+        product_id: productId,
+        checked_qty: currentQty,
+        checked_by: profile.id,
+        checked_at: new Date().toISOString(),
+      },
+      { onConflict: "delivery_date,product_id" },
+    );
+    if (error) return { ok: false, error: error.message };
+  } else {
+    const { error } = await supabase
+      .from("procurement_item_checks")
+      .delete()
+      .eq("delivery_date", deliveryDate)
+      .eq("product_id", productId);
+    if (error) return { ok: false, error: error.message };
   }
 
   revalidatePath("/admin/procurement");

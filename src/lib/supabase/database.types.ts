@@ -285,6 +285,33 @@ export interface Database {
         };
         Relationships: [];
       };
+      procurement_item_checks: {
+        Row: {
+          id: string;
+          delivery_date: string;
+          product_id: string;
+          checked_qty: number;
+          checked_by: string | null;
+          checked_at: string;
+        };
+        Insert: {
+          id?: string;
+          delivery_date: string;
+          product_id: string;
+          checked_qty: number;
+          checked_by?: string | null;
+          checked_at?: string;
+        };
+        Update: {
+          id?: string;
+          delivery_date?: string;
+          product_id?: string;
+          checked_qty?: number;
+          checked_by?: string | null;
+          checked_at?: string;
+        };
+        Relationships: [];
+      };
       bills: {
         Row: {
           id: string;

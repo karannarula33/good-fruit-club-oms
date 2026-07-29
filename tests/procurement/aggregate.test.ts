@@ -4,48 +4,64 @@ import { aggregateProcurement, type ProcurementLine } from "@/lib/procurement/ag
 const MANGO = "product-mango";
 const BANANA = "product-banana";
 
-function line(productId: string, qty: number, placedAt: string): ProcurementLine {
-  return { productId, qty, placedAt: new Date(placedAt) };
+function line(productId: string, qty: number, customerName: string): ProcurementLine {
+  return { productId, qty, customerName };
 }
 
+const NONE = new Map<string, number>();
+
 describe("aggregateProcurement", () => {
-  it("puts everything in extras when no mark exists yet", () => {
-    const lines = [line(MANGO, 2, "2026-07-27T10:00:00Z"), line(BANANA, 1, "2026-07-27T11:00:00Z")];
-    const { base, extras } = aggregateProcurement(lines, null);
-    expect(base.size).toBe(0);
-    expect(extras.get(MANGO)).toBe(2);
-    expect(extras.get(BANANA)).toBe(1);
-  });
-
-  it("splits by placedAt relative to listSentAt", () => {
-    const listSentAt = new Date("2026-07-27T12:00:00Z");
-    const lines = [
-      line(MANGO, 2, "2026-07-27T10:00:00Z"), // before mark -> base
-      line(MANGO, 1, "2026-07-27T14:00:00Z"), // after mark -> extras
-    ];
-    const { base, extras } = aggregateProcurement(lines, listSentAt);
-    expect(base.get(MANGO)).toBe(2);
-    expect(extras.get(MANGO)).toBe(1);
-  });
-
-  it("treats an order placed exactly at listSentAt as base (inclusive)", () => {
-    const listSentAt = new Date("2026-07-27T12:00:00Z");
-    const lines = [line(MANGO, 3, "2026-07-27T12:00:00.000Z")];
-    const { base, extras } = aggregateProcurement(lines, listSentAt);
-    expect(base.get(MANGO)).toBe(3);
-    expect(extras.has(MANGO)).toBe(false);
-  });
-
-  it("sums multiple lines for the same product within a bucket", () => {
-    const lines = [line(MANGO, 1, "2026-07-27T09:00:00Z"), line(MANGO, 1.5, "2026-07-27T09:30:00Z")];
-    const { extras } = aggregateProcurement(lines, null);
-    expect(extras.get(MANGO)).toBe(2.5);
+  it("sums qty per product across multiple lines", () => {
+    const lines = [line(MANGO, 1, "Rita"), line(MANGO, 1.5, "Karan")];
+    const [row] = aggregateProcurement(lines, NONE);
+    expect(row.totalQty).toBe(2.5);
   });
 
   it("keeps distinct products separate", () => {
-    const lines = [line(MANGO, 2, "2026-07-27T09:00:00Z"), line(BANANA, 5, "2026-07-27T09:00:00Z")];
-    const { extras } = aggregateProcurement(lines, null);
-    expect(extras.get(MANGO)).toBe(2);
-    expect(extras.get(BANANA)).toBe(5);
+    const lines = [line(MANGO, 2, "Rita"), line(BANANA, 5, "Rita")];
+    const rows = aggregateProcurement(lines, NONE);
+    expect(rows.find((r) => r.productId === MANGO)?.totalQty).toBe(2);
+    expect(rows.find((r) => r.productId === BANANA)?.totalQty).toBe(5);
+  });
+
+  it("merges contributions per customer, sorted by qty desc then name", () => {
+    const lines = [line(MANGO, 2, "Samander"), line(MANGO, 1, "Arjun"), line(MANGO, 2, "Karan")];
+    const [row] = aggregateProcurement(lines, NONE);
+    expect(row.contributions).toEqual([
+      { customerName: "Karan", qty: 2 },
+      { customerName: "Samander", qty: 2 },
+      { customerName: "Arjun", qty: 1 },
+    ]);
+  });
+
+  it("merges multiple lines from the same customer into one contribution", () => {
+    const lines = [line(MANGO, 1, "Rita"), line(MANGO, 1, "Rita")];
+    const [row] = aggregateProcurement(lines, NONE);
+    expect(row.contributions).toEqual([{ customerName: "Rita", qty: 2 }]);
+  });
+
+  it("extraQty is 0 when the product was never checked", () => {
+    const lines = [line(MANGO, 3, "Rita")];
+    const [row] = aggregateProcurement(lines, NONE);
+    expect(row.extraQty).toBe(0);
+  });
+
+  it("extraQty is 0 when checked and nothing has changed since", () => {
+    const lines = [line(MANGO, 3, "Rita")];
+    const [row] = aggregateProcurement(lines, new Map([[MANGO, 3]]));
+    expect(row.extraQty).toBe(0);
+  });
+
+  it("extraQty is positive when more has been ordered since the item was checked", () => {
+    const lines = [line(MANGO, 3, "Rita"), line(MANGO, 2, "Karan")];
+    const [row] = aggregateProcurement(lines, new Map([[MANGO, 3]]));
+    expect(row.totalQty).toBe(5);
+    expect(row.extraQty).toBe(2);
+  });
+
+  it("floors extraQty at 0 if checkedQty is somehow ahead of the current total", () => {
+    const lines = [line(MANGO, 1, "Rita")];
+    const [row] = aggregateProcurement(lines, new Map([[MANGO, 5]]));
+    expect(row.extraQty).toBe(0);
   });
 });

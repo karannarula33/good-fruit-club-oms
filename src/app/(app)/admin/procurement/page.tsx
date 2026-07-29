@@ -1,40 +1,10 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { aggregateProcurement, type ProcurementLine } from "@/lib/procurement/aggregate";
-import { formatIstDisplay, utcToIstDatetimeLocal } from "@/lib/time/ist";
+import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
-import { Card } from "@/components/ui/card";
 import { DateNav } from "@/components/ui/date-nav";
-import { cn } from "@/lib/cn";
-import { MarkSentButton } from "./mark-sent-button";
-
-function ProcurementRows({
-  rows,
-  tint = false,
-}: {
-  rows: { name: string; unitLabel: string | null; qty: number }[];
-  tint?: boolean;
-}) {
-  if (rows.length === 0) {
-    return <p className="font-sans text-sm text-muted">Nothing here.</p>;
-  }
-  return (
-    <div className="flex flex-col gap-2">
-      {rows.map((row) => (
-        <Card
-          key={row.name}
-          elevated={!tint}
-          className={cn("flex items-center justify-between !space-y-0", tint && "bg-[#FFF4E8]")}
-        >
-          <div className="font-sans text-sm font-bold text-foreground">{row.name}</div>
-          <div className="font-sans text-[12.5px] font-semibold text-muted">
-            {row.qty} {row.unitLabel ?? ""}
-          </div>
-        </Card>
-      ))}
-    </div>
-  );
-}
+import { ProcurementChecklist, type ProcurementDisplayRow } from "./procurement-checklist";
 
 export default async function AdminProcurementPage({
   searchParams,
@@ -48,18 +18,20 @@ export default async function AdminProcurementPage({
 
   const supabase = await createClient();
 
-  const [{ data: orders }, { data: products }, { data: mark }] = await Promise.all([
-    supabase.from("orders").select("id, placed_at").eq("delivery_date", date).neq("status", "cancelled"),
+  const [{ data: orders }, { data: products }, { data: checks }] = await Promise.all([
+    supabase.from("orders").select("id, customer_id").eq("delivery_date", date).neq("status", "cancelled"),
     supabase.from("products").select("id, name, unit_label"),
-    supabase
-      .from("procurement_marks")
-      .select("list_sent_at, profiles(full_name)")
-      .eq("delivery_date", date)
-      .maybeSingle(),
+    supabase.from("procurement_item_checks").select("product_id, checked_qty").eq("delivery_date", date),
   ]);
 
   const orderIds = (orders ?? []).map((o) => o.id);
-  const placedAtByOrderId = new Map((orders ?? []).map((o) => [o.id, new Date(o.placed_at)]));
+  const customerIds = [...new Set((orders ?? []).map((o) => o.customer_id))];
+  const customerIdByOrderId = new Map((orders ?? []).map((o) => [o.id, o.customer_id]));
+
+  const { data: customers } = customerIds.length
+    ? await supabase.from("customers").select("id, display_name").in("id", customerIds)
+    : { data: [] };
+  const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
 
   const { data: orderLines } = orderIds.length
     ? await supabase.from("order_lines").select("order_id, product_id, ordered_qty").in("order_id", orderIds)
@@ -67,27 +39,37 @@ export default async function AdminProcurementPage({
 
   const lines: ProcurementLine[] = (orderLines ?? [])
     .filter((line) => line.product_id && line.ordered_qty !== null)
-    .map((line) => ({
-      productId: line.product_id as string,
-      qty: line.ordered_qty as number,
-      placedAt: placedAtByOrderId.get(line.order_id) as Date,
-    }));
+    .map((line) => {
+      const customerId = customerIdByOrderId.get(line.order_id);
+      const customerName = customerId ? (customerById.get(customerId)?.display_name ?? "Unknown") : "Unknown";
+      return {
+        productId: line.product_id as string,
+        qty: line.ordered_qty as number,
+        customerName,
+      };
+    });
 
-  const listSentAt = mark ? new Date(mark.list_sent_at) : null;
-  const { base, extras } = aggregateProcurement(lines, listSentAt);
+  const checkedQtyByProduct = new Map((checks ?? []).map((c) => [c.product_id, c.checked_qty]));
+
+  const rows = aggregateProcurement(lines, checkedQtyByProduct);
 
   const productById = new Map((products ?? []).map((p) => [p.id, p]));
-  function toRows(bucket: Map<string, number>) {
-    return [...bucket.entries()]
-      .map(([productId, qty]) => {
-        const product = productById.get(productId);
-        return product ? { name: product.name, unitLabel: product.unit_label, qty } : null;
-      })
-      .filter((row): row is { name: string; unitLabel: string | null; qty: number } => row !== null)
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }
-
-  const sentByName = (mark?.profiles as unknown as { full_name: string } | null)?.full_name;
+  const displayRows: ProcurementDisplayRow[] = rows
+    .map((row) => {
+      const product = productById.get(row.productId);
+      if (!product) return null;
+      return {
+        productId: row.productId,
+        name: product.name,
+        unitLabel: product.unit_label,
+        totalQty: row.totalQty,
+        extraQty: row.extraQty,
+        contributions: row.contributions,
+        checked: checkedQtyByProduct.has(row.productId),
+      };
+    })
+    .filter((row): row is ProcurementDisplayRow => row !== null)
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
     <div className="flex flex-col gap-5 px-[18px] pt-5 pb-6">
@@ -97,29 +79,7 @@ export default async function AdminProcurementPage({
         action={<DateNav date={date} basePath="/admin/procurement" />}
       />
 
-      <Card elevated className="flex items-center justify-between flex-wrap gap-3">
-        <p className="font-sans text-sm text-[#5b5e66]">
-          {listSentAt ? (
-            <>
-              Sent to vendor at {formatIstDisplay(listSentAt)}
-              {sentByName ? ` by ${sentByName}` : ""}
-            </>
-          ) : (
-            "Not yet sent to vendor."
-          )}
-        </p>
-        {!listSentAt && <MarkSentButton deliveryDate={date} />}
-      </Card>
-
-      <div className="flex flex-col gap-2">
-        <div className="px-0.5 font-sans text-[11px] font-bold uppercase tracking-wide text-muted">Sent to vendor</div>
-        <ProcurementRows rows={toRows(base)} />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <div className="px-0.5 font-sans text-[11px] font-bold uppercase tracking-wide text-muted">New extras</div>
-        <ProcurementRows rows={toRows(extras)} tint />
-      </div>
+      <ProcurementChecklist date={date} rows={displayRows} />
     </div>
   );
 }

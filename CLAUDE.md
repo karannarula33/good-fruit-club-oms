@@ -60,9 +60,9 @@ plus `cancelled` (allowed until `packed`).
 - Procurement is a **day-level activity, not a per-order status.** Do not add a "procured" order status.
 
 ### 3.6 Procurement list
-For a given delivery date, the procurement view aggregates ordered quantities by product across that day's orders, split into two buckets:
-1. **Base list** — orders placed before the previous evening's send-to-vendor moment (admin presses "mark list sent to vendor", which timestamps the split).
-2. **Extras** — orders placed after that moment (the morning same-day orders). Shown separately so admin can convey only the delta to the vendor.
+For a given delivery date, the procurement view aggregates ordered quantities by product across that day's orders into a **single checklist** — one row per product, with a subtext showing which customers make up that quantity (name + qty each).
+
+Each row has a checkbox: the admin/procurement person checks it off once that item has been conveyed to the vendor. Checking a row snapshots the product's current total quantity; if more of that product gets ordered afterward, the row shows a "+N new" delta badge (still checked, just flagging what's changed since) rather than reverting to unchecked. Unchecking a row clears its snapshot. This is a per-item mechanism — there is no day-level "mark list sent" moment. (Superseded the original base/extras-by-timestamp split; `procurement_marks` is unused by the app but left in the schema.)
 
 ### 3.7 Ledger: order-level allocation, not a bare running balance
 Customer accounts use a double-entry-lite ledger:
@@ -158,9 +158,17 @@ payment_allocations(                                 -- splits one credit across
 )
 
 procurement_marks(id uuid pk, delivery_date date unique, list_sent_at timestamptz, sent_by refs profiles)
+-- unused by the app (see §3.6) -- kept, not dropped
+
+procurement_item_checks(                             -- per-item "sent to vendor" checklist state (§3.6)
+  id uuid pk, delivery_date date, product_id refs products,
+  checked_qty numeric(8,3) not null,                  -- product's total ordered qty snapshotted at check time
+  checked_by refs profiles, checked_at timestamptz,
+  unique(delivery_date, product_id)
+)
 ```
 
-Derived (queries/views, not stored): customer balance, order payment status, procurement aggregation (base vs extras via `procurement_marks.list_sent_at`), delivery route list.
+Derived (queries/views, not stored): customer balance, order payment status, procurement aggregation (per-product totals + contributor breakdown, delta vs `procurement_item_checks.checked_qty`), delivery route list.
 
 ---
 
