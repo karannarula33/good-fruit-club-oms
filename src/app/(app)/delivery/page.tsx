@@ -3,19 +3,26 @@ import { createClient } from "@/lib/supabase/server";
 import { compareByZone, type Zone } from "@/lib/customers/zone";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
+import { DateNav } from "@/components/ui/date-nav";
 import { DeliveryStopsBoard } from "./delivery-stops-board";
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
-export default async function DeliveryPage() {
+export default async function DeliveryPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const profile = await requireRole(["delivery", "admin"]);
 
+  const params = await searchParams;
+  const date = params.date ?? utcToIstDatetimeLocal(new Date()).slice(0, 10);
+
   const supabase = await createClient();
-  const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
   const { data: orders } = await supabase
     .from("orders")
     .select("id, status, customer_id, customers(display_name, phone, address, zone)")
-    .eq("delivery_date", today)
+    .eq("delivery_date", date)
     .in("status", ["packed", "dispatched", "out_for_delivery", "delivered"]);
 
   const orderIds = (orders ?? []).map((o) => o.id);
@@ -51,9 +58,13 @@ export default async function DeliveryPage() {
 
   return (
     <div className="px-[18px] pt-5 pb-4">
-      <PageHeader title="Delivery Route" subtitle={`${stops.length} stop${stops.length === 1 ? "" : "s"} on the run`} />
+      <PageHeader
+        title="Delivery Route"
+        subtitle={`${stops.length} stop${stops.length === 1 ? "" : "s"} on the run`}
+        action={<DateNav date={date} basePath="/delivery" />}
+      />
       <div className="mt-4">
-        <DeliveryStopsBoard readyToDispatch={readyToDispatch} stops={stops} isAdmin={profile.role === "admin"} />
+        <DeliveryStopsBoard key={date} readyToDispatch={readyToDispatch} stops={stops} isAdmin={profile.role === "admin"} />
       </div>
     </div>
   );

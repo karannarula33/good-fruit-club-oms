@@ -1,18 +1,25 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
+import { DateNav } from "@/components/ui/date-nav";
 import { PackingScreen, type PackingOrder } from "./packing-screen";
 
-export default async function PackerPage() {
+export default async function PackerPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   const profile = await requireRole(["packer", "admin"]);
 
+  const params = await searchParams;
+  const date = params.date ?? utcToIstDatetimeLocal(new Date()).slice(0, 10);
+
   const supabase = await createClient();
-  const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
   const { data: orders } = await supabase
     .from("orders")
     .select("id, customer_id, status")
-    .eq("delivery_date", today)
+    .eq("delivery_date", date)
     .in("status", ["recorded", "packed", "cancelled"]);
 
   const orderIds = (orders ?? []).map((o) => o.id);
@@ -92,7 +99,12 @@ export default async function PackerPage() {
 
   return (
     <div className="px-[18px] pt-5 pb-4">
+      <div className="mb-3 flex justify-end">
+        <DateNav date={date} basePath="/packer" />
+      </div>
       <PackingScreen
+        key={date}
+        date={date}
         orders={packingOrders}
         products={substituteProducts}
         isAdmin={profile.role === "admin"}

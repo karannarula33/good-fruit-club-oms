@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { FormError } from "@/components/ui/form-error";
 import { useToast } from "@/components/ui/toast";
 import { deriveDisplayStatus, displayStatusChipStyle, DISPLAY_STATUS_LABEL } from "@/lib/orders/status-display";
+import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { cn } from "@/lib/cn";
 import type { OrderStatus, UnitType } from "@/lib/supabase/database.types";
 
@@ -450,15 +451,23 @@ function BillView({
 }
 
 export function PackingScreen({
+  date,
   orders,
   products,
   isAdmin,
 }: {
+  date: string;
   orders: PackingOrder[];
   products: { id: string; name: string }[];
   isAdmin: boolean;
 }) {
   const router = useRouter();
+  const isToday = date === utcToIstDatetimeLocal(new Date()).slice(0, 10);
+  const dateLabel = new Date(`${date}T00:00:00Z`).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
   const { showToast } = useToast();
   const [view, setView] = useState<View>("queue");
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
@@ -500,7 +509,7 @@ export function PackingScreen({
             <div className="mb-4">
               <h1 className="font-display text-[23px] font-bold text-foreground">Packing Queue</h1>
               <p className="mt-[3px] font-sans text-xs font-medium text-muted">
-                {toPack.length} order{toPack.length === 1 ? "" : "s"} waiting
+                {toPack.length} order{toPack.length === 1 ? "" : "s"} waiting{!isToday && ` · ${dateLabel}`}
               </p>
             </div>
 

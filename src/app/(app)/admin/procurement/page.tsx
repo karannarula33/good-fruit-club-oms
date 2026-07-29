@@ -1,19 +1,12 @@
-import Link from "next/link";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { aggregateProcurement, type ProcurementLine } from "@/lib/procurement/aggregate";
 import { formatIstDisplay, utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { DateNav } from "@/components/ui/date-nav";
 import { cn } from "@/lib/cn";
 import { MarkSentButton } from "./mark-sent-button";
-
-function addDays(dateStr: string, days: number): string {
-  const date = new Date(`${dateStr}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
-}
 
 function ProcurementRows({
   rows,
@@ -101,19 +94,7 @@ export default async function AdminProcurementPage({
       <PageHeader
         title="Procurement"
         subtitle="Before the mandi run"
-        action={
-          <div className="flex items-center gap-3">
-            <Link href={`/admin/procurement?date=${addDays(date, -1)}`} className="font-sans text-sm font-bold text-muted">
-              ← Prev
-            </Link>
-            <form>
-              <Input type="date" name="date" defaultValue={date} size="sm" />
-            </form>
-            <Link href={`/admin/procurement?date=${addDays(date, 1)}`} className="font-sans text-sm font-bold text-muted">
-              Next →
-            </Link>
-          </div>
-        }
+        action={<DateNav date={date} basePath="/admin/procurement" />}
       />
 
       <Card elevated className="flex items-center justify-between flex-wrap gap-3">

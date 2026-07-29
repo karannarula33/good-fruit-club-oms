@@ -3,18 +3,26 @@ import { createClient } from "@/lib/supabase/server";
 import { compareByZone, type Zone } from "@/lib/customers/zone";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
+import { DateNav } from "@/components/ui/date-nav";
 import { StatusBoardRealtime } from "./status-board-realtime";
 
-export default async function StatusBoardPage() {
+export default async function StatusBoardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ date?: string }>;
+}) {
   await requireRole(["admin", "packer", "delivery"]);
 
-  const supabase = await createClient();
+  const params = await searchParams;
   const today = utcToIstDatetimeLocal(new Date()).slice(0, 10);
+  const date = params.date ?? today;
+
+  const supabase = await createClient();
 
   const { data: orders } = await supabase
     .from("orders")
     .select("id, status, status_timestamps, customer_id, customers(display_name, zone)")
-    .eq("delivery_date", today)
+    .eq("delivery_date", date)
     .neq("status", "cancelled");
 
   const orderIds = (orders ?? []).map((o) => o.id);
@@ -39,9 +47,13 @@ export default async function StatusBoardPage() {
 
   return (
     <div className="px-[18px] pt-5 pb-6">
-      <PageHeader title="Status Board" subtitle="Live · today's orders" />
+      <PageHeader
+        title="Status Board"
+        subtitle={date === today ? "Live · today's orders" : `Orders for ${date}`}
+        action={<DateNav date={date} basePath="/status" />}
+      />
       <div className="mt-4">
-        <StatusBoardRealtime initialOrders={rows} today={today} />
+        <StatusBoardRealtime key={date} initialOrders={rows} today={date} />
       </div>
     </div>
   );
