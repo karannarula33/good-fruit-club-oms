@@ -248,6 +248,16 @@ function EditableDetail({
                   <div className="flex gap-2">
                     <button
                       type="button"
+                      onClick={() => updateLine(line.id, { resolution: "packed" })}
+                      className={cn(
+                        "flex-1 rounded-xl px-3 py-2.5 font-sans text-[11.5px] font-bold",
+                        state.resolution === "packed" ? "bg-success text-white" : "bg-neutral-bg text-neutral-text",
+                      )}
+                    >
+                      Packed
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => updateLine(line.id, { resolution: "unavailable" })}
                       className={cn(
                         "flex-1 rounded-xl px-3 py-2.5 font-sans text-[11.5px] font-bold",
