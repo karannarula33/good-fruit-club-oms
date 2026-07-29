@@ -5,7 +5,7 @@ import { loadPriceItemRecords } from "@/lib/pricing/load";
 import { loadCatalogEntries } from "@/lib/catalog/load";
 import { formatIstDisplay } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { Card } from "@/components/ui/card";
 import { PricePasteReview } from "./price-paste-review";
 
 export default async function AdminPricesPage() {
@@ -22,39 +22,28 @@ export default async function AdminPricesPage() {
   const resolved = resolvePrices(priceItems, new Date());
 
   return (
-    <div className="p-6 space-y-8">
-      <PageHeader
-        title="Prices"
-        subtitle="Paste today's price list to publish a new version, or review the active prices below."
-      />
+    <div className="flex flex-col gap-5 px-[18px] pt-5 pb-6">
+      <PageHeader title="Prices" subtitle="Paste today's vendor price message" />
 
-      <Table>
-        <THead>
-          <TR>
-            <TH>Product</TH>
-            <TH>Unit</TH>
-            <TH>Price</TH>
-            <TH>As of</TH>
-          </TR>
-        </THead>
-        <TBody>
-          {(products ?? []).map((product) => {
-            const price = resolved.get(product.id);
-            return (
-              <TR key={product.id}>
-                <TD>{product.name}</TD>
-                <TD className="text-neutral-600 dark:text-neutral-400">{product.unit_label ?? product.unit_type}</TD>
-                <TD>
-                  {price ? `₹${price.pricePerUnit.toFixed(2)}` : <span className="text-danger-text">Not yet priced</span>}
-                </TD>
-                <TD className="text-neutral-600 dark:text-neutral-400">
-                  {price ? formatIstDisplay(price.effectiveFrom) : "—"}
-                </TD>
-              </TR>
-            );
-          })}
-        </TBody>
-      </Table>
+      <div className="flex flex-col gap-2">
+        {(products ?? []).map((product) => {
+          const price = resolved.get(product.id);
+          return (
+            <Card key={product.id} elevated className="flex items-center justify-between !space-y-0">
+              <div>
+                <div className="font-sans text-sm font-bold text-foreground">{product.name}</div>
+                <div className="font-sans text-[11.5px] font-semibold text-muted">
+                  per {product.unit_label ?? product.unit_type}
+                  {price && ` · as of ${formatIstDisplay(price.effectiveFrom)}`}
+                </div>
+              </div>
+              <div className="font-display text-[15px] font-bold text-foreground">
+                {price ? `₹${price.pricePerUnit.toFixed(2)}` : <span className="text-danger-text">Not priced</span>}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
 
       <PricePasteReview catalog={catalog} />
     </div>

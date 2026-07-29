@@ -13,8 +13,8 @@ export default async function AdminOrdersPage() {
   ]);
 
   return (
-    <div className="p-6 space-y-4">
-      <PageHeader title="Order Entry" subtitle="Paste a customer's WhatsApp order to parse, review, and save it." />
+    <div className="flex flex-col gap-4 px-[18px] pt-5">
+      <PageHeader title="Order Entry" subtitle="Paste the customer's WhatsApp message" />
 
       <OrderPasteReview
         customers={(customers ?? []).map((c) => ({ id: c.id, name: c.display_name, phone: c.phone }))}

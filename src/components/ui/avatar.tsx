@@ -22,16 +22,22 @@ export function colorFor(name: string): string {
 export function Avatar({
   name,
   size = 40,
+  shape = "circle",
   className,
 }: {
   name: string;
   size?: number;
+  shape?: "circle" | "square";
   className?: string;
 }) {
   const color = colorFor(name);
   return (
     <div
-      className={cn("flex shrink-0 items-center justify-center rounded-full font-display font-bold", className)}
+      className={cn(
+        "flex shrink-0 items-center justify-center font-display font-bold",
+        shape === "circle" ? "rounded-full" : "rounded-xl",
+        className,
+      )}
       style={{
         width: size,
         height: size,

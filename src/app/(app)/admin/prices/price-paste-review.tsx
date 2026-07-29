@@ -2,13 +2,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { parsePriceListDraft, publishPriceVersion, type ReviewLine } from "@/app/actions/prices";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
 import { FormError } from "@/components/ui/form-error";
-import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
+import { useToast } from "@/components/ui/toast";
 
 type Step = "paste" | "review";
 
@@ -26,6 +28,7 @@ interface Line extends ReviewLine {
 
 export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
   const router = useRouter();
+  const { showToast } = useToast();
 
   const [step, setStep] = useState<Step>("paste");
   const [rawText, setRawText] = useState("");
@@ -90,124 +93,106 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
     setLines([]);
     setNote("");
     setEffectiveFromLocal(utcToIstDatetimeLocal(new Date()));
+    showToast("Prices published ✓");
     router.refresh();
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold">Publish a price list</h2>
-
+    <div className="flex flex-col gap-3">
       {step === "paste" && (
-        <form onSubmit={handleParse} className="space-y-4">
-          <label className="block space-y-1">
-            <span className="text-sm text-neutral-600 dark:text-neutral-400">Paste today&apos;s price list</span>
-            <textarea
-              required
-              rows={12}
-              value={rawText}
-              onChange={(e) => setRawText(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 dark:border-neutral-700 bg-background px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand"
-              placeholder={"Chausa Mango: ₹295 / KG\nBanarsi Langda Mango: ₹225 / KG\n..."}
-            />
-          </label>
+        <form onSubmit={handleParse} className="flex flex-col gap-3">
+          <textarea
+            required
+            rows={9}
+            value={rawText}
+            onChange={(e) => setRawText(e.target.value)}
+            placeholder="Paste vendor price message here…"
+            className="w-full rounded-2xl border-[1.5px] border-[#ECEAE3] bg-[#F1F1EE] p-3.5 font-sans text-[14.5px] font-medium leading-[1.55] text-foreground focus:outline-none"
+          />
           {error && <FormError>{error}</FormError>}
-          <Button type="submit" pending={pending} pendingText="Parsing…">
-            Parse
+          <Button type="submit" variant="dark" fullWidth pending={pending} pendingText="Parsing…">
+            Parse Prices
           </Button>
         </form>
       )}
 
       {step === "review" && (
-        <div className="space-y-4">
-          <div className="flex flex-wrap gap-4">
-            <label className="block space-y-1">
-              <span className="text-sm text-neutral-600 dark:text-neutral-400">Effective from (IST)</span>
-              <Input
-                type="datetime-local"
-                value={effectiveFromLocal}
-                onChange={(e) => setEffectiveFromLocal(e.target.value)}
-              />
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => setStep("paste")}
+              className="inline-flex items-center gap-1 font-sans text-[13.5px] font-bold text-muted"
+            >
+              <ChevronLeft className="size-4" /> Back
+            </button>
+            <span className="font-sans text-[13.5px] font-bold text-foreground">Review Prices</span>
+            <span className="w-11" />
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <label className="flex flex-col gap-1">
+              <span className="font-sans text-sm text-muted">Effective from (IST)</span>
+              <Input type="datetime-local" value={effectiveFromLocal} onChange={(e) => setEffectiveFromLocal(e.target.value)} />
             </label>
-            <label className="block flex-1 min-w-48 space-y-1">
-              <span className="text-sm text-neutral-600 dark:text-neutral-400">Note (optional)</span>
-              <Input
-                type="text"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                className="w-full"
-                placeholder="Morning list"
-              />
+            <label className="flex flex-1 min-w-48 flex-col gap-1">
+              <span className="font-sans text-sm text-muted">Note (optional)</span>
+              <Input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full" placeholder="Morning list" />
             </label>
           </div>
 
-          <Table>
-            <THead>
-              <TR>
-                <TH>Raw text</TH>
-                <TH>Product</TH>
-                <TH>Price</TH>
-                <TH>Status</TH>
-              </TR>
-            </THead>
-            <TBody>
-              {lines.map((line, index) => {
-                const needsMapping = line.originalProductId === null;
-                return (
-                  <TR key={index} className="align-top">
-                    <TD className="text-neutral-600 dark:text-neutral-400 max-w-xs">{line.rawText}</TD>
-                    <TD>
-                      {needsMapping ? (
-                        <div className="space-y-1">
-                          <Select
-                            value={line.productId ?? ""}
-                            onChange={(e) => updateLine(index, { productId: e.target.value || null })}
-                          >
-                            <option value="">Select product…</option>
-                            {catalog.map((product) => (
-                              <option key={product.id} value={product.id}>
-                                {product.name}
-                              </option>
-                            ))}
-                          </Select>
-                          {line.productId && (
-                            <label className="flex items-center gap-1 text-xs text-neutral-600 dark:text-neutral-400">
-                              <input
-                                type="checkbox"
-                                checked={line.rememberAlias}
-                                onChange={(e) => updateLine(index, { rememberAlias: e.target.checked })}
-                              />
-                              Remember &quot;{line.aliasText}&quot; as {productNameById.get(line.productId)}
-                            </label>
-                          )}
-                        </div>
-                      ) : (
-                        <span>{productNameById.get(line.productId as string) ?? "Unknown"}</span>
-                      )}
-                    </TD>
-                    <TD>
-                      <Input
-                        className="w-24"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={line.price ?? ""}
-                        onChange={(e) =>
-                          updateLine(index, { price: e.target.value === "" ? null : Number(e.target.value) })
-                        }
-                      />
-                    </TD>
-                    <TD>
-                      {line.confidence === "clean" ? (
-                        <span className="text-sm text-neutral-500">Clean</span>
-                      ) : (
-                        <span className="text-sm text-danger-text">{line.flagReason ?? "Flagged"}</span>
-                      )}
-                    </TD>
-                  </TR>
-                );
-              })}
-            </TBody>
-          </Table>
+          <div className="flex flex-col gap-2">
+            {lines.map((line, index) => {
+              const needsMapping = line.originalProductId === null;
+              return (
+                <Card key={index} elevated className="flex items-center justify-between gap-3 !space-y-0">
+                  <div className="min-w-0 flex-1">
+                    {needsMapping ? (
+                      <div className="space-y-1.5">
+                        <div className="font-sans text-xs text-muted">&quot;{line.rawText}&quot;</div>
+                        <Select
+                          value={line.productId ?? ""}
+                          onChange={(e) => updateLine(index, { productId: e.target.value || null })}
+                        >
+                          <option value="">Select product…</option>
+                          {catalog.map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.name}
+                            </option>
+                          ))}
+                        </Select>
+                        {line.productId && (
+                          <label className="flex items-center gap-1 font-sans text-xs font-semibold text-muted">
+                            <input
+                              type="checkbox"
+                              checked={line.rememberAlias}
+                              onChange={(e) => updateLine(index, { rememberAlias: e.target.checked })}
+                            />
+                            Remember &quot;{line.aliasText}&quot; as {productNameById.get(line.productId)}
+                          </label>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="font-sans text-sm font-bold text-foreground">
+                        {productNameById.get(line.productId as string) ?? "Unknown"}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <span className="font-sans text-sm font-bold text-muted">₹</span>
+                    <Input
+                      className="w-[70px] text-center"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={line.price ?? ""}
+                      onChange={(e) => updateLine(index, { price: e.target.value === "" ? null : Number(e.target.value) })}
+                    />
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
 
           {error && <FormError>{error}</FormError>}
           {!canPublish && (
@@ -216,14 +201,9 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
             </FormError>
           )}
 
-          <div className="flex gap-3 items-center">
-            <Button onClick={handlePublish} disabled={!canPublish} pending={pending} pendingText="Publishing…">
-              Publish
-            </Button>
-            <Button variant="ghost" onClick={() => setStep("paste")}>
-              Back to paste
-            </Button>
-          </div>
+          <Button variant="primary" fullWidth disabled={!canPublish} onClick={handlePublish} pending={pending} pendingText="Publishing…">
+            Publish Prices
+          </Button>
         </div>
       )}
     </div>
