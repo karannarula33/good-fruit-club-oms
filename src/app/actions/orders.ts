@@ -10,7 +10,7 @@ import { resolvePriceForProduct } from "@/lib/pricing/resolve";
 import { deriveDeliveryDate } from "@/lib/orders/delivery-date";
 import { deriveZoneFromAddress } from "@/lib/customers/zone";
 import {
-  parseOrderPaste,
+  parseOrderBatchPaste,
   type CustomerEntry,
   type ParsedOrderCustomer,
   type ParsedOrderLine,
@@ -21,6 +21,7 @@ export interface DraftLine extends ParsedOrderLine {
 }
 
 export interface OrderDraft {
+  rawText: string;
   customer: ParsedOrderCustomer;
   deliveryDate: string;
   lines: DraftLine[];
@@ -38,10 +39,10 @@ async function loadCustomers(supabase: Awaited<ReturnType<typeof createClient>>)
   }));
 }
 
-export async function parseOrderDraft(
+export async function parseOrderBatchDraft(
   rawText: string,
   placedAtIst: string,
-): Promise<{ ok: true; draft: OrderDraft } | { ok: false; error: string }> {
+): Promise<{ ok: true; drafts: OrderDraft[] } | { ok: false; error: string }> {
   await requireRole(["admin"]);
 
   if (!rawText.trim()) {
@@ -56,25 +57,31 @@ export async function parseOrderDraft(
       loadPriceItemRecords(supabase),
     ]);
 
-    const parsed = await parseOrderPaste(rawText, catalog, customers);
+    const batch = await parseOrderBatchPaste(rawText, catalog, customers);
     const placedAtUtc = istWallClockToUtc(placedAtIst);
 
-    const lines: DraftLine[] = parsed.lines.map((line) => ({
-      ...line,
-      resolvedPrice: line.productId
-        ? (resolvePriceForProduct(priceItems, line.productId, placedAtUtc)?.pricePerUnit ?? null)
-        : null,
-    }));
+    const drafts: OrderDraft[] = batch.map(({ rawText: segmentRawText, order: parsed }) => {
+      const lines: DraftLine[] = parsed.lines.map((line) => ({
+        ...line,
+        resolvedPrice: line.productId
+          ? (resolvePriceForProduct(priceItems, line.productId, placedAtUtc)?.pricePerUnit ?? null)
+          : null,
+      }));
 
-    return {
-      ok: true,
-      draft: {
+      return {
+        rawText: segmentRawText,
         customer: parsed.customer,
         deliveryDate: deriveDeliveryDate(placedAtUtc),
         lines,
         notes: parsed.notes,
-      },
-    };
+      };
+    });
+
+    if (drafts.length === 0) {
+      return { ok: false, error: "Couldn't find any order in that paste." };
+    }
+
+    return { ok: true, drafts };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Failed to parse order." };
   }

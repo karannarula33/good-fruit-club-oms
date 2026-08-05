@@ -2,6 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   ORDER_PARSER_SYSTEM_PROMPT,
   buildOrderParserUserMessage,
+  ORDER_BATCH_PARSER_SYSTEM_PROMPT,
+  buildOrderBatchParserUserMessage,
 } from "@/lib/prompts/order-parser";
 import { buildCatalogBlock, type CatalogEntry } from "@/lib/parser/catalog";
 
@@ -173,6 +175,97 @@ function validateParsedOrder(raw: unknown): ParsedOrder {
     lines: order.lines.map((line, index) => validateLine(line, index)),
     notes: requireString(order.notes, "notes"),
   };
+}
+
+const ORDER_BATCH_SCHEMA = {
+  type: "object",
+  properties: {
+    orders: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          raw_text: { type: "string" },
+          customer: ORDER_SCHEMA.properties.customer,
+          lines: ORDER_SCHEMA.properties.lines,
+          notes: { type: "string" },
+        },
+        required: ["raw_text", "customer", "lines", "notes"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["orders"],
+  additionalProperties: false,
+} as const;
+
+export interface ParsedOrderBatchEntry {
+  rawText: string;
+  order: ParsedOrder;
+}
+
+function validateBatchEntry(raw: unknown, index: number): ParsedOrderBatchEntry {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error(`Parser response: orders[${index}] must be an object`);
+  }
+  const entry = raw as Record<string, unknown>;
+  return {
+    rawText: requireString(entry.raw_text, `orders[${index}].raw_text`),
+    order: validateParsedOrder(entry),
+  };
+}
+
+function validateParsedOrderBatch(raw: unknown): ParsedOrderBatchEntry[] {
+  if (typeof raw !== "object" || raw === null) {
+    throw new Error("Parser response must be an object");
+  }
+  const batch = raw as Record<string, unknown>;
+  if (!Array.isArray(batch.orders)) {
+    throw new Error("Parser response missing an orders array");
+  }
+  return batch.orders.map((entry, index) => validateBatchEntry(entry, index));
+}
+
+export async function parseOrderBatchPaste(
+  rawText: string,
+  catalog: CatalogEntry[],
+  customers: CustomerEntry[],
+): Promise<ParsedOrderBatchEntry[]> {
+  const client = new Anthropic();
+
+  const response = await client.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 8192,
+    thinking: { type: "disabled" },
+    system: ORDER_BATCH_PARSER_SYSTEM_PROMPT,
+    output_config: {
+      format: { type: "json_schema", schema: ORDER_BATCH_SCHEMA },
+    },
+    messages: [
+      {
+        role: "user",
+        content: buildOrderBatchParserUserMessage({
+          catalogBlock: buildCatalogBlock(catalog),
+          customerBlock: buildCustomerBlock(customers),
+          rawText,
+        }),
+      },
+    ],
+  });
+
+  if (response.stop_reason === "refusal") {
+    throw new Error("Order parser request was refused");
+  }
+
+  const textBlock = response.content.find(
+    (block): block is Anthropic.TextBlock => block.type === "text",
+  );
+  if (!textBlock) {
+    throw new Error("Order parser response contained no text block");
+  }
+
+  const raw: unknown = JSON.parse(textBlock.text);
+  return validateParsedOrderBatch(raw);
 }
 
 export async function parseOrderPaste(
