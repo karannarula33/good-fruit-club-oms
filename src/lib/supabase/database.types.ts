@@ -189,6 +189,7 @@ export interface Database {
           notes: string | null;
           created_by: string | null;
           created_at: string;
+          is_historical: boolean;
         };
         Insert: {
           id?: string;
@@ -201,6 +202,7 @@ export interface Database {
           notes?: string | null;
           created_by?: string | null;
           created_at?: string;
+          is_historical?: boolean;
         };
         Update: {
           id?: string;
@@ -213,6 +215,7 @@ export interface Database {
           notes?: string | null;
           created_by?: string | null;
           created_at?: string;
+          is_historical?: boolean;
         };
         Relationships: [];
       };
@@ -224,6 +227,7 @@ export interface Database {
           ordered_qty: number | null;
           ordered_unit: string | null;
           locked_price_per_unit: number | null;
+          locked_cogs_per_unit: number | null;
           actual_qty: number | null;
           line_status: LineStatus;
           is_substitution: boolean;
@@ -238,6 +242,7 @@ export interface Database {
           ordered_qty?: number | null;
           ordered_unit?: string | null;
           locked_price_per_unit?: number | null;
+          locked_cogs_per_unit?: number | null;
           actual_qty?: number | null;
           line_status?: LineStatus;
           is_substitution?: boolean;
@@ -252,6 +257,7 @@ export interface Database {
           ordered_qty?: number | null;
           ordered_unit?: string | null;
           locked_price_per_unit?: number | null;
+          locked_cogs_per_unit?: number | null;
           actual_qty?: number | null;
           line_status?: LineStatus;
           is_substitution?: boolean;
