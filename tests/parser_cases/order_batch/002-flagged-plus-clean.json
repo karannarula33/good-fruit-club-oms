@@ -1,0 +1,22 @@
+{
+  "raw_paste": "Exotica sector 53\nTower C2 flag 1201\nMr. Mehra\n2kg Chausa\n\n1. Chausa mango 2 kg\n2. ⁠grapes red globe 1 kg\n3. ⁠cherry 1 box\n4. ⁠blueberry Jumbo 1 box\nDelivery \n8 DM DLF Phase 2\nSubhash Verma",
+  "expected": {
+    "orders": [
+      {
+        "customer": { "confidence": "flagged" },
+        "lines": [
+          { "product_name": "Chausa Mango", "qty": 2, "confidence": "clean" }
+        ]
+      },
+      {
+        "customer": { "name": "Subhash Verma", "confidence": "clean" },
+        "lines": [
+          { "product_name": "Chausa Mango", "confidence": "clean" },
+          { "product_name": "Red Globe Grapes", "confidence": "clean" },
+          { "product_name": "Afghan Cherry", "confidence": "clean" },
+          { "product_name": "Jumbo Blueberry", "confidence": "clean" }
+        ]
+      }
+    ]
+  }
+}

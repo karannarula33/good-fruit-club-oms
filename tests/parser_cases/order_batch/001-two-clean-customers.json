@@ -1,0 +1,23 @@
+{
+  "raw_paste": "1. Chausa mango 2 kg\n2. ⁠grapes red globe 1 kg\n3. ⁠cherry 1 box\n4. ⁠blueberry Jumbo 1 box\nDelivery \n8 DM DLF Phase 2\nSubhash Verma\n\nNK Mehndiratta \nAanar - 1 kg\nMariposa plum-Half kg (if possible) please. Mehndiratta",
+  "expected": {
+    "orders": [
+      {
+        "customer": { "name": "Subhash Verma", "confidence": "clean" },
+        "lines": [
+          { "product_name": "Chausa Mango", "confidence": "clean" },
+          { "product_name": "Red Globe Grapes", "confidence": "clean" },
+          { "product_name": "Afghan Cherry", "confidence": "clean" },
+          { "product_name": "Jumbo Blueberry", "confidence": "clean" }
+        ]
+      },
+      {
+        "customer": { "name": "NK Mehndiratta", "confidence": "clean" },
+        "lines": [
+          { "product_name": "Pomegranate", "qty": 1 },
+          { "product_name": "Mariposa Plum", "qty": 0.5, "confidence": "clean" }
+        ]
+      }
+    ]
+  }
+}

@@ -10,7 +10,7 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { parseOrderPaste, type CustomerEntry } from "../src/lib/parser/parse-order";
+import { parseOrderPaste, parseOrderBatchPaste, type CustomerEntry, type ParsedOrder } from "../src/lib/parser/parse-order";
 import { loadCatalogEntries } from "../src/lib/catalog/load";
 import { createServiceRoleClient } from "../src/lib/supabase/service-role";
 
@@ -25,11 +25,20 @@ interface ExpectedCustomer {
   confidence?: "clean" | "flagged";
 }
 
+interface ExpectedOrder {
+  customer: ExpectedCustomer;
+  lines: ExpectedLine[];
+}
+
 interface Fixture {
   raw_paste: string;
+  expected: ExpectedOrder;
+}
+
+interface BatchFixture {
+  raw_paste: string;
   expected: {
-    customer: ExpectedCustomer;
-    lines: ExpectedLine[];
+    orders: ExpectedOrder[];
   };
 }
 
@@ -39,55 +48,90 @@ async function loadCustomers(supabase: ReturnType<typeof createServiceRoleClient
   return (data ?? []).map((row) => ({ id: row.id, name: row.display_name, phone: row.phone, address: row.address }));
 }
 
+function compareOrder(
+  expected: ExpectedOrder,
+  actual: ParsedOrder,
+  productNameById: Map<string, string>,
+  customerNameById: Map<string, string>,
+): string[] {
+  const mismatches: string[] = [];
+
+  const actualCustomerName = actual.customer.matchedId ? (customerNameById.get(actual.customer.matchedId) ?? null) : null;
+  if (expected.customer.name !== undefined && actualCustomerName !== expected.customer.name) {
+    mismatches.push(`customer.name: expected ${expected.customer.name}, got ${actualCustomerName}`);
+  }
+  if (expected.customer.confidence !== undefined && actual.customer.confidence !== expected.customer.confidence) {
+    mismatches.push(`customer.confidence: expected ${expected.customer.confidence}, got ${actual.customer.confidence}`);
+  }
+
+  if (actual.lines.length !== expected.lines.length) {
+    mismatches.push(`line count: expected ${expected.lines.length}, got ${actual.lines.length}`);
+  } else {
+    expected.lines.forEach((expectedLine, i) => {
+      const actualLine = actual.lines[i];
+      const actualProductName = actualLine.productId ? (productNameById.get(actualLine.productId) ?? null) : null;
+      if (expectedLine.product_name !== undefined && actualProductName !== expectedLine.product_name) {
+        mismatches.push(`line ${i} product: expected ${expectedLine.product_name}, got ${actualProductName}`);
+      }
+      if (expectedLine.qty !== undefined && actualLine.qty !== expectedLine.qty) {
+        mismatches.push(`line ${i} qty: expected ${expectedLine.qty}, got ${actualLine.qty}`);
+      }
+      if (expectedLine.confidence !== undefined && actualLine.confidence !== expectedLine.confidence) {
+        mismatches.push(`line ${i} confidence: expected ${expectedLine.confidence}, got ${actualLine.confidence}`);
+      }
+    });
+  }
+
+  return mismatches;
+}
+
 async function main() {
   const supabase = createServiceRoleClient();
   const [catalog, customers] = await Promise.all([loadCatalogEntries(supabase), loadCustomers(supabase)]);
   const productNameById = new Map(catalog.map((p) => [p.id, p.name]));
   const customerNameById = new Map(customers.map((c) => [c.id, c.name]));
 
+  let allPassed = true;
+
   const fixturesDir = path.join(__dirname, "..", "tests", "parser_cases", "order");
   const files = readdirSync(fixturesDir).filter((f) => f.endsWith(".json")).sort();
-
-  let allPassed = true;
 
   for (const file of files) {
     const fixture: Fixture = JSON.parse(readFileSync(path.join(fixturesDir, file), "utf-8"));
     const result = await parseOrderPaste(fixture.raw_paste, catalog, customers);
-
-    const mismatches: string[] = [];
-
-    const expectedCustomer = fixture.expected.customer;
-    const actualCustomerName = result.customer.matchedId ? customerNameById.get(result.customer.matchedId) ?? null : null;
-    if (expectedCustomer.name !== undefined && actualCustomerName !== expectedCustomer.name) {
-      mismatches.push(`customer.name: expected ${expectedCustomer.name}, got ${actualCustomerName}`);
-    }
-    if (expectedCustomer.confidence !== undefined && result.customer.confidence !== expectedCustomer.confidence) {
-      mismatches.push(`customer.confidence: expected ${expectedCustomer.confidence}, got ${result.customer.confidence}`);
-    }
-
-    if (result.lines.length !== fixture.expected.lines.length) {
-      mismatches.push(`line count: expected ${fixture.expected.lines.length}, got ${result.lines.length}`);
-    } else {
-      fixture.expected.lines.forEach((expectedLine, i) => {
-        const actualLine = result.lines[i];
-        const actualProductName = actualLine.productId ? productNameById.get(actualLine.productId) ?? null : null;
-        if (expectedLine.product_name !== undefined && actualProductName !== expectedLine.product_name) {
-          mismatches.push(`line ${i} product: expected ${expectedLine.product_name}, got ${actualProductName}`);
-        }
-        if (expectedLine.qty !== undefined && actualLine.qty !== expectedLine.qty) {
-          mismatches.push(`line ${i} qty: expected ${expectedLine.qty}, got ${actualLine.qty}`);
-        }
-        if (expectedLine.confidence !== undefined && actualLine.confidence !== expectedLine.confidence) {
-          mismatches.push(`line ${i} confidence: expected ${expectedLine.confidence}, got ${actualLine.confidence}`);
-        }
-      });
-    }
+    const mismatches = compareOrder(fixture.expected, result, productNameById, customerNameById);
 
     if (mismatches.length === 0) {
       console.log(`PASS ${file}`);
     } else {
       allPassed = false;
       console.log(`FAIL ${file}`);
+      for (const mismatch of mismatches) console.log(`  ${mismatch}`);
+    }
+  }
+
+  const batchFixturesDir = path.join(__dirname, "..", "tests", "parser_cases", "order_batch");
+  const batchFiles = readdirSync(batchFixturesDir).filter((f) => f.endsWith(".json")).sort();
+
+  for (const file of batchFiles) {
+    const fixture: BatchFixture = JSON.parse(readFileSync(path.join(batchFixturesDir, file), "utf-8"));
+    const results = await parseOrderBatchPaste(fixture.raw_paste, catalog, customers);
+
+    const mismatches: string[] = [];
+    if (results.length !== fixture.expected.orders.length) {
+      mismatches.push(`order count: expected ${fixture.expected.orders.length}, got ${results.length}`);
+    } else {
+      fixture.expected.orders.forEach((expectedOrder, i) => {
+        const orderMismatches = compareOrder(expectedOrder, results[i].order, productNameById, customerNameById);
+        for (const mismatch of orderMismatches) mismatches.push(`order ${i} ${mismatch}`);
+      });
+    }
+
+    if (mismatches.length === 0) {
+      console.log(`PASS (batch) ${file}`);
+    } else {
+      allPassed = false;
+      console.log(`FAIL (batch) ${file}`);
       for (const mismatch of mismatches) console.log(`  ${mismatch}`);
     }
   }
