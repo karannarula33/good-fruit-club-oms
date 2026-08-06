@@ -91,7 +91,9 @@ export function EngagementList({ rows, computedAt, hasConfig }: { rows: Engageme
     startTransition(async () => {
       const result = await recomputeEngagementState();
       if (result.ok) {
-        showToast(`Recomputed ${result.summary.customersProcessed} customers`);
+        const { state, outcomes } = result.summary;
+        const outcomeNote = outcomes.evaluated > 0 ? `, ${outcomes.evaluated} outcomes evaluated` : "";
+        showToast(`Recomputed ${state.customersProcessed} customers${outcomeNote}`);
       } else {
         showToast(result.error);
       }
