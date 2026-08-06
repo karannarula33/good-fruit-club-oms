@@ -3,22 +3,30 @@ import { createClient } from "@/lib/supabase/server";
 import { buildEngagementConfig } from "@/lib/engagement/config";
 import { computePriorityScore, isVipCheckin, type TriggerType } from "@/lib/engagement/priority";
 import type { EngagementState } from "@/lib/engagement/classify";
+import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
 import { EngagementList, type EngagementRow } from "./engagement-list";
+import { NudgeQueue, type NudgeQueueRow } from "./nudge-queue";
 
-// CLAUDE_engagement_engine_FINAL.md §13 slice 1: a read-only admin view,
-// sorted by priority, over eng_customer_state (populated by STEP 1's
-// nightly/manual recompute). No queue, no drafting yet -- this alone
-// replaces every manual severity-sort the admin used to do by hand.
+// CLAUDE_engagement_engine_FINAL.md §13: slice 1's read-only priority browse
+// view (over eng_customer_state) plus slice 3's actionable daily queue
+// (over eng_nudge_queue, scoped to breaking/third_order_risk -- no drafts
+// yet, that's slice 4).
 export default async function AdminEngagementPage() {
   await requireRole(["admin"]);
 
   const supabase = await createClient();
+  const todayIso = utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
-  const [{ data: states }, { data: customers }, { data: configRows }] = await Promise.all([
+  const [{ data: states }, { data: customers }, { data: configRows }, { data: queueRows }] = await Promise.all([
     supabase.from("eng_customer_state").select("*"),
     supabase.from("customers").select("id, display_name, phone, zone"),
     supabase.from("eng_config").select("key, value"),
+    supabase
+      .from("eng_nudge_queue")
+      .select("id, customer_id, trigger_type, recommended_action, priority_score, rationale, status, snooze_until")
+      .or(`status.eq.pending,and(status.eq.snoozed,snooze_until.lte.${todayIso})`)
+      .order("priority_score", { ascending: false }),
   ]);
 
   const config = configRows && configRows.length > 0 ? buildEngagementConfig(configRows) : null;
@@ -61,10 +69,33 @@ export default async function AdminEngagementPage() {
 
   const computedAt = rows[0]?.computedAt ?? null;
 
+  const nudgeRows: NudgeQueueRow[] = (queueRows ?? [])
+    .map((q) => {
+      const customer = customerById.get(q.customer_id);
+      if (!customer) return null;
+      const row: NudgeQueueRow = {
+        nudgeId: q.id,
+        customerId: q.customer_id,
+        displayName: customer.display_name,
+        phone: customer.phone,
+        zone: customer.zone,
+        triggerType: q.trigger_type as EngagementState,
+        recommendedAction: q.recommended_action,
+        priorityScore: q.priority_score,
+        rationale: q.rationale,
+      };
+      return row;
+    })
+    .filter((r): r is NudgeQueueRow => r !== null);
+
   return (
-    <div className="flex flex-col gap-5 px-[18px] pt-5 pb-6">
+    <div className="flex flex-col gap-6 px-[18px] pt-5 pb-6">
       <PageHeader title="Engagement" subtitle="Who to reach out to, and why" />
-      <EngagementList rows={rows} computedAt={computedAt} hasConfig={config !== null} />
+      <NudgeQueue rows={nudgeRows} />
+      <div className="flex flex-col gap-3">
+        <p className="font-sans text-[13px] font-bold text-muted">All customers by priority</p>
+        <EngagementList rows={rows} computedAt={computedAt} hasConfig={config !== null} />
+      </div>
     </div>
   );
 }

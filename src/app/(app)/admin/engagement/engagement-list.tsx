@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
 import { formatIstDisplay } from "@/lib/time/ist";
 import { recomputeEngagementState } from "@/app/actions/engagement";
+import { buildRationale } from "@/lib/engagement/rationale";
 import type { EngagementState } from "@/lib/engagement/classify";
 import type { CustomerZone } from "@/lib/supabase/database.types";
 
@@ -52,16 +53,14 @@ const STATE_TONE: Record<EngagementState, BadgeTone> = {
 };
 
 function rationale(row: EngagementRow): string {
-  if (row.vipCheckin) {
-    return `VIP, on rhythm, silent ${row.daysSinceLast}d.`;
-  }
-  if (row.state === "prospect") return "No orders yet.";
-  if (row.state === "first_timer") return `1 order, ${row.daysSinceLast}d ago -- still within grace.`;
-  if (row.severityRatio === null || row.expectedGapDays === null) {
-    return `${row.orderCount} orders, ${row.daysSinceLast}d silent.`;
-  }
-  const gap = row.expectedGapDays < 10 ? row.expectedGapDays.toFixed(1) : Math.round(row.expectedGapDays);
-  return `Orders every ~${gap}d, silent ${row.daysSinceLast}d (${row.severityRatio.toFixed(1)}x).`;
+  return buildRationale({
+    state: row.state,
+    vipCheckin: row.vipCheckin,
+    orderCount: row.orderCount,
+    daysSinceLast: row.daysSinceLast,
+    expectedGapDays: row.expectedGapDays,
+    severityRatio: row.severityRatio,
+  });
 }
 
 // A row has a real trigger (would generate a nudge candidate once the queue
