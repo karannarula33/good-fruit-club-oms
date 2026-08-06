@@ -26,6 +26,9 @@ export type LineStatus = "pending" | "packed" | "unavailable";
 export type ParseConfidence = "clean" | "flagged";
 export type LedgerEntryType = "debit" | "credit";
 export type LedgerMode = "cash" | "upi" | "other";
+export type NudgeRecommendedAction = "message" | "call" | "skip_no_phone";
+export type NudgeStatus = "pending" | "approved" | "edited" | "relayed" | "skipped" | "snoozed" | "expired";
+export type SuppressionReason = "complaint" | "requested_no_contact" | "two_unanswered";
 
 export interface Database {
   public: {
@@ -405,6 +408,189 @@ export interface Database {
           ledger_entry_id?: string;
           order_id?: string;
           amount?: number;
+        };
+        Relationships: [];
+      };
+      eng_customer_state: {
+        Row: {
+          customer_id: string;
+          computed_at: string;
+          order_count: number;
+          first_order_at: string | null;
+          last_order_at: string | null;
+          days_since_last: number | null;
+          expected_gap_days: number | null;
+          severity_ratio: number | null;
+          revenue: number | null;
+          revenue_percentile: number | null;
+          is_vip: boolean | null;
+          aov: number | null;
+          favourite_products: string[] | null;
+          last_order_products: string[] | null;
+          state: string;
+          previous_state: string | null;
+          state_changed_at: string | null;
+        };
+        Insert: {
+          customer_id: string;
+          computed_at: string;
+          order_count: number;
+          first_order_at?: string | null;
+          last_order_at?: string | null;
+          days_since_last?: number | null;
+          expected_gap_days?: number | null;
+          severity_ratio?: number | null;
+          revenue?: number | null;
+          revenue_percentile?: number | null;
+          is_vip?: boolean | null;
+          aov?: number | null;
+          favourite_products?: string[] | null;
+          last_order_products?: string[] | null;
+          state: string;
+          previous_state?: string | null;
+          state_changed_at?: string | null;
+        };
+        Update: {
+          customer_id?: string;
+          computed_at?: string;
+          order_count?: number;
+          first_order_at?: string | null;
+          last_order_at?: string | null;
+          days_since_last?: number | null;
+          expected_gap_days?: number | null;
+          severity_ratio?: number | null;
+          revenue?: number | null;
+          revenue_percentile?: number | null;
+          is_vip?: boolean | null;
+          aov?: number | null;
+          favourite_products?: string[] | null;
+          last_order_products?: string[] | null;
+          state?: string;
+          previous_state?: string | null;
+          state_changed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      eng_nudge_queue: {
+        Row: {
+          id: string;
+          run_date: string;
+          customer_id: string;
+          trigger_type: string;
+          recommended_action: NudgeRecommendedAction;
+          priority_score: number;
+          rationale: string;
+          draft_message: string | null;
+          draft_rationale: string | null;
+          status: NudgeStatus;
+          final_message: string | null;
+          snooze_until: string | null;
+          created_at: string;
+          reviewed_at: string | null;
+          relayed_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          run_date: string;
+          customer_id: string;
+          trigger_type: string;
+          recommended_action: NudgeRecommendedAction;
+          priority_score: number;
+          rationale: string;
+          draft_message?: string | null;
+          draft_rationale?: string | null;
+          status?: NudgeStatus;
+          final_message?: string | null;
+          snooze_until?: string | null;
+          created_at?: string;
+          reviewed_at?: string | null;
+          relayed_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          run_date?: string;
+          customer_id?: string;
+          trigger_type?: string;
+          recommended_action?: NudgeRecommendedAction;
+          priority_score?: number;
+          rationale?: string;
+          draft_message?: string | null;
+          draft_rationale?: string | null;
+          status?: NudgeStatus;
+          final_message?: string | null;
+          snooze_until?: string | null;
+          created_at?: string;
+          reviewed_at?: string | null;
+          relayed_at?: string | null;
+        };
+        Relationships: [];
+      };
+      eng_nudge_outcomes: {
+        Row: {
+          nudge_id: string;
+          relayed_at: string | null;
+          reordered_within_7d: boolean | null;
+          reordered_within_14d: boolean | null;
+          reorder_order_id: string | null;
+          days_to_reorder: number | null;
+          evaluated_at: string | null;
+        };
+        Insert: {
+          nudge_id: string;
+          relayed_at?: string | null;
+          reordered_within_7d?: boolean | null;
+          reordered_within_14d?: boolean | null;
+          reorder_order_id?: string | null;
+          days_to_reorder?: number | null;
+          evaluated_at?: string | null;
+        };
+        Update: {
+          nudge_id?: string;
+          relayed_at?: string | null;
+          reordered_within_7d?: boolean | null;
+          reordered_within_14d?: boolean | null;
+          reorder_order_id?: string | null;
+          days_to_reorder?: number | null;
+          evaluated_at?: string | null;
+        };
+        Relationships: [];
+      };
+      eng_suppression: {
+        Row: {
+          customer_id: string;
+          reason: SuppressionReason;
+          added_at: string | null;
+          expires_at: string | null;
+        };
+        Insert: {
+          customer_id: string;
+          reason: SuppressionReason;
+          added_at?: string | null;
+          expires_at?: string | null;
+        };
+        Update: {
+          customer_id?: string;
+          reason?: SuppressionReason;
+          added_at?: string | null;
+          expires_at?: string | null;
+        };
+        Relationships: [];
+      };
+      eng_config: {
+        Row: {
+          key: string;
+          value: number;
+          updated_at: string | null;
+        };
+        Insert: {
+          key: string;
+          value: number;
+          updated_at?: string | null;
+        };
+        Update: {
+          key?: string;
+          value?: number;
+          updated_at?: string | null;
         };
         Relationships: [];
       };
