@@ -80,6 +80,11 @@ function NudgeCard({ row, onActioned }: { row: NudgeQueueRow; onActioned: () => 
                 No phone
               </Badge>
             )}
+            {row.recommendedAction === "call" && (
+              <Badge tone="warning" size="sm">
+                Call
+              </Badge>
+            )}
           </div>
           <p className="mt-1 font-display text-[15px] font-bold text-foreground truncate">{row.displayName}</p>
           <p className="font-sans text-[11.5px] font-medium text-muted">{row.zone}</p>
@@ -137,10 +142,19 @@ function NudgeCard({ row, onActioned }: { row: NudgeQueueRow; onActioned: () => 
               size="sm"
               variant="dark"
               disabled={isPending}
-              onClick={() => run(() => relayNudge(row.nudgeId, row.draftMessage ?? undefined), "Marked relayed")}
+              onClick={() =>
+                run(
+                  () => relayNudge(row.nudgeId, row.draftMessage ?? undefined),
+                  row.recommendedAction === "call" ? "Marked called" : "Marked relayed",
+                )
+              }
             >
-              <Check className="size-3.5" aria-hidden="true" />
-              Relay
+              {row.recommendedAction === "call" ? (
+                <Phone className="size-3.5" aria-hidden="true" />
+              ) : (
+                <Check className="size-3.5" aria-hidden="true" />
+              )}
+              {row.recommendedAction === "call" ? "Mark called" : "Relay"}
             </Button>
             {row.draftMessage && (
               <Button

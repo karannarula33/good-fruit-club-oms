@@ -18,6 +18,10 @@ const config: EngagementConfig = buildEngagementConfig([
   { key: "DRIFT_SEVERITY_HIGH", value: 3.5 },
   { key: "LAPSED_ABSOLUTE_DAYS", value: 30 },
   { key: "VIP_CHECKIN_INTERVAL_DAYS", value: 10 },
+  { key: "FREQUENCY_CAP_DAYS", value: 10 },
+  { key: "UNANSWERED_COOLDOWN_COUNT", value: 2 },
+  { key: "UNANSWERED_COOLDOWN_DAYS", value: 30 },
+  { key: "CALL_ESCALATION_ENABLED", value: 1 },
 ]);
 
 describe("buildEngagementConfig", () => {

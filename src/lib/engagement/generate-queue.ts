@@ -1,22 +1,25 @@
-// CLAUDE_engagement_engine_FINAL.md §5 STEP 3 + STEP 4 + STEP 5, scoped per
-// §13 slice 4 to two triggers (breaking, third_order_risk). Reads
-// eng_customer_state (already fresh from this run's STEP 1) and inserts
-// pending eng_nudge_queue rows, drafted (§9) for every `message` candidate.
-// Idempotent within a day: re-running the pipeline (or the admin's manual
-// recompute) on the same IST calendar date won't create a second row for a
-// customer already queued today.
+// CLAUDE_engagement_engine_FINAL.md §5 STEP 3 + STEP 4 + STEP 5, full scope
+// per §13 slice 5: every order-driven trigger plus vip_checkin, §7 action
+// modulation, and §6 suppression as the final gate. Reads eng_customer_state
+// (already fresh from this run's STEP 1) and inserts pending eng_nudge_queue
+// rows, drafted (§9) for every `message` candidate. Idempotent within a day:
+// re-running the pipeline (or the admin's manual recompute) on the same IST
+// calendar date won't create a second row for a customer already queued
+// today.
 //
-// Cross-day accumulation (a still-breaking customer getting a fresh row
-// every day they're never actioned) is expected at this slice -- §0.1
-// explicitly re-surfaces a still-triggering customer every day regardless
-// of nudge history, and the frequency-cap suppression that dampens this is
-// slice 5 (§6) work, not yet built.
+// Cross-day accumulation (a still-triggering customer getting a fresh row
+// every day) is still expected by design (§0.1) for anyone *not* caught by
+// §6 suppression -- the frequency cap only kicks in once a nudge has
+// actually been relayed to them.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database, NudgeRecommendedAction } from "@/lib/supabase/database.types";
+import type { Database, NudgeRecommendedAction, SuppressionReason } from "@/lib/supabase/database.types";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
-import { ACTIVE_TRIGGERS, generateCandidate, type GeneratedCandidate } from "./candidates";
+import { ACTIVE_TRIGGERS, determineTrigger, generateCandidate, type GeneratedCandidate } from "./candidates";
 import type { EngagementState } from "./classify";
+import { buildEngagementConfig } from "./config";
+import { isVipCheckin } from "./priority";
+import { loadNudgeHistory } from "./nudge-history";
 import { draftNudgeMessage } from "./draft";
 import { loadTodaysCatalogueHighlights } from "./catalogue-highlights";
 
@@ -25,6 +28,7 @@ type Client = SupabaseClient<Database>;
 export interface QueueGenerationSummary {
   candidatesGenerated: number;
   skippedAlreadyQueuedToday: number;
+  suppressed: number;
   draftsGenerated: number;
   draftFailures: number;
 }
@@ -51,6 +55,7 @@ interface CandidateContext {
 }
 
 const DRAFT_CONCURRENCY = 5;
+const MS_PER_DAY = 86_400_000;
 
 // STEP 4 (§9): 'call' and 'skip_no_phone' get rationale only, no draft --
 // only 'message' candidates get drafted. Failures are caught per-candidate
@@ -72,7 +77,7 @@ async function draftForCandidates(
           customerName: ctx.displayName,
           zone: ctx.zone,
           triggerType: ctx.candidate.triggerType,
-          isFollowup: false, // real follow-up detection is §7, slice 5
+          isFollowup: ctx.candidate.isFollowup,
           rationale: ctx.candidate.rationale,
           orderCount: ctx.orderCount,
           lastOrderProducts: ctx.lastOrderProducts,
@@ -95,20 +100,40 @@ async function draftForCandidates(
 }
 
 export async function runQueueGeneration(supabase: Client): Promise<QueueGenerationSummary> {
-  const runDate = utcToIstDatetimeLocal(new Date()).slice(0, 10);
+  const now = new Date();
+  const runDate = utcToIstDatetimeLocal(now).slice(0, 10);
+  const empty: QueueGenerationSummary = {
+    candidatesGenerated: 0,
+    skippedAlreadyQueuedToday: 0,
+    suppressed: 0,
+    draftsGenerated: 0,
+    draftFailures: 0,
+  };
 
+  const { data: configRows, error: configError } = await supabase.from("eng_config").select("key, value");
+  if (configError) throw new Error(`Failed to load eng_config: ${configError.message}`);
+  if (!configRows || configRows.length === 0) return empty;
+  const config = buildEngagementConfig(configRows);
+
+  // habituated rows are fetched too -- they're needed to detect the
+  // vip_checkin flag (§4), even though habituated itself is never in
+  // ACTIVE_TRIGGERS.
   const { data: states, error: statesError } = await supabase
     .from("eng_customer_state")
     .select(
       "customer_id, state, is_vip, revenue_percentile, order_count, days_since_last, expected_gap_days, severity_ratio, favourite_products, last_order_products",
     )
-    .in("state", ACTIVE_TRIGGERS as string[]);
+    .in("state", [...ACTIVE_TRIGGERS, "habituated"] as string[]);
   if (statesError) throw new Error(`Failed to load eng_customer_state: ${statesError.message}`);
-  if (!states || states.length === 0) {
-    return { candidatesGenerated: 0, skippedAlreadyQueuedToday: 0, draftsGenerated: 0, draftFailures: 0 };
-  }
+  if (!states || states.length === 0) return empty;
 
-  const customerIds = states.map((s) => s.customer_id);
+  const triggering = states.filter((s) => {
+    const vipCheckin = isVipCheckin({ state: s.state as EngagementState, isVip: s.is_vip ?? false, daysSinceLast: s.days_since_last }, config);
+    return determineTrigger(s.state as EngagementState, vipCheckin) !== null;
+  });
+  if (triggering.length === 0) return empty;
+
+  const customerIds = triggering.map((s) => s.customer_id);
   const { data: customers, error: customersError } = await supabase
     .from("customers")
     .select("id, phone, display_name, zone")
@@ -123,6 +148,16 @@ export async function runQueueGeneration(supabase: Client): Promise<QueueGenerat
   if (existingError) throw new Error(`Failed to load today's eng_nudge_queue rows: ${existingError.message}`);
   const alreadyQueuedToday = new Set((existingToday ?? []).map((r) => r.customer_id));
 
+  const pending = triggering.filter((s) => !alreadyQueuedToday.has(s.customer_id));
+  const skipped = triggering.length - pending.length;
+  if (pending.length === 0) return { ...empty, skippedAlreadyQueuedToday: skipped };
+
+  const history = await loadNudgeHistory(
+    supabase,
+    pending.map((s) => s.customer_id),
+    now,
+  );
+
   const { data: settingsRow, error: settingsError } = await supabase
     .from("eng_settings")
     .select("seasonal_note")
@@ -134,35 +169,66 @@ export async function runQueueGeneration(supabase: Client): Promise<QueueGenerat
   const todaysCatalogueHighlights = await loadTodaysCatalogueHighlights(supabase);
 
   const contexts: CandidateContext[] = [];
-  let skipped = 0;
+  const twoUnansweredInserts: { customer_id: string; reason: SuppressionReason; expires_at: string }[] = [];
+  let suppressedCount = 0;
 
-  for (const s of states) {
-    if (alreadyQueuedToday.has(s.customer_id)) {
-      skipped++;
+  for (const s of pending) {
+    const customer = customerById.get(s.customer_id);
+    const vipCheckin = isVipCheckin({ state: s.state as EngagementState, isVip: s.is_vip ?? false, daysSinceLast: s.days_since_last }, config);
+    const ctx = history.get(s.customer_id);
+
+    const resolution = generateCandidate(
+      {
+        customerId: s.customer_id,
+        state: s.state as EngagementState,
+        vipCheckin,
+        phone: customer?.phone ?? null,
+        isVip: s.is_vip ?? false,
+        revenuePercentile: s.revenue_percentile ?? 0,
+        orderCount: s.order_count,
+        daysSinceLast: s.days_since_last,
+        expectedGapDays: s.expected_gap_days,
+        severityRatio: s.severity_ratio,
+        lastRelayedMessage: ctx?.lastRelayedMessage ?? null,
+        hasActiveSuppression: ctx?.hasActiveSuppression ?? false,
+        unansweredCount60d: ctx?.unansweredCount60d ?? 0,
+        lastRelayedAnyAt: ctx?.lastRelayedAnyAt ?? null,
+        now,
+      },
+      config,
+    );
+
+    if (resolution.kind === "no_trigger") continue;
+
+    if (resolution.kind === "suppressed") {
+      suppressedCount++;
+      if (resolution.autoInsertTwoUnanswered) {
+        twoUnansweredInserts.push({
+          customer_id: s.customer_id,
+          reason: "two_unanswered",
+          expires_at: new Date(now.getTime() + config.unansweredCooldownDays * MS_PER_DAY).toISOString(),
+        });
+      }
       continue;
     }
-    const customer = customerById.get(s.customer_id);
-    const candidate = generateCandidate({
-      customerId: s.customer_id,
-      state: s.state as EngagementState,
-      phone: customer?.phone ?? null,
-      isVip: s.is_vip ?? false,
-      revenuePercentile: s.revenue_percentile ?? 0,
-      orderCount: s.order_count,
-      daysSinceLast: s.days_since_last,
-      expectedGapDays: s.expected_gap_days,
-      severityRatio: s.severity_ratio,
-    });
-    if (!candidate) continue;
 
     contexts.push({
-      candidate,
+      candidate: resolution.candidate,
       displayName: customer?.display_name ?? "",
       zone: customer?.zone ?? "",
       orderCount: s.order_count,
       favouriteProducts: s.favourite_products ?? [],
       lastOrderProducts: s.last_order_products ?? [],
     });
+  }
+
+  if (twoUnansweredInserts.length > 0) {
+    // Never resets an existing row's expiry -- if one's already there
+    // (e.g. from a prior run), leave it as-is.
+    const { error } = await supabase
+      .from("eng_suppression")
+      .upsert(twoUnansweredInserts, { onConflict: "customer_id,reason", ignoreDuplicates: true });
+    if (error) throw new Error(`Failed to auto-insert two_unanswered suppression: ${error.message}`);
   }
 
   const drafts = await draftForCandidates(contexts, todaysCatalogueHighlights, seasonalNote);
@@ -193,6 +259,7 @@ export async function runQueueGeneration(supabase: Client): Promise<QueueGenerat
   return {
     candidatesGenerated: rows.length,
     skippedAlreadyQueuedToday: skipped,
+    suppressed: suppressedCount,
     draftsGenerated: drafts.size,
     draftFailures: messagesAttempted - drafts.size,
   };
