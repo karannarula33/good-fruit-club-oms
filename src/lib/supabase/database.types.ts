@@ -594,6 +594,27 @@ export interface Database {
         };
         Relationships: [];
       };
+      eng_settings: {
+        Row: {
+          id: number;
+          seasonal_note: string | null;
+          updated_at: string | null;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: number;
+          seasonal_note?: string | null;
+          updated_at?: string | null;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: number;
+          seasonal_note?: string | null;
+          updated_at?: string | null;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

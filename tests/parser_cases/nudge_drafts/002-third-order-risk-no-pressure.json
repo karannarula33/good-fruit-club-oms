@@ -1,0 +1,16 @@
+{
+  "input": {
+    "customer_name": "Rohit Malhotra",
+    "zone": "DLF Phase 1",
+    "trigger_type": "third_order_risk",
+    "is_followup": false,
+    "rationale": "Orders every ~9d, silent 15d (1.7x).",
+    "order_count": 2,
+    "last_order_products": ["Kiwi"],
+    "favourite_products": ["Kiwi", "Papaya"],
+    "todays_catalogue_highlights": [],
+    "seasonal_note": null
+  },
+  "expectMentionsAnyOf": ["Kiwi", "Papaya"],
+  "expectNoWorriesPhrase": true
+}

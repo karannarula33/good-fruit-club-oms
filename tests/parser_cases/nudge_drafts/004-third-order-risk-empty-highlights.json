@@ -1,0 +1,16 @@
+{
+  "input": {
+    "customer_name": "Priya Nair",
+    "zone": "DLF Phase 2",
+    "trigger_type": "third_order_risk",
+    "is_followup": false,
+    "rationale": "Orders every ~9d, silent 20d (2.2x).",
+    "order_count": 2,
+    "last_order_products": ["Dasheri Mango"],
+    "favourite_products": ["Dasheri Mango"],
+    "todays_catalogue_highlights": [],
+    "seasonal_note": null
+  },
+  "expectMentionsAnyOf": ["Dasheri Mango"],
+  "expectNoWorriesPhrase": true
+}

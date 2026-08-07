@@ -1,0 +1,15 @@
+{
+  "input": {
+    "customer_name": "Vijay Khanna",
+    "zone": "Phase 1",
+    "trigger_type": "breaking",
+    "is_followup": false,
+    "rationale": "Orders every 2d, silent 17d (8.5x).",
+    "order_count": 12,
+    "last_order_products": ["Alphonso Mango", "Banana"],
+    "favourite_products": ["Alphonso Mango", "Banana", "Papaya"],
+    "todays_catalogue_highlights": ["Turkish Cherry", "Gift Box"],
+    "seasonal_note": "Cherry season ending soon; festive gift boxes and Turkish cherries newly launched"
+  },
+  "expectMentionsAnyOf": ["Alphonso Mango", "Banana", "Papaya", "12"]
+}

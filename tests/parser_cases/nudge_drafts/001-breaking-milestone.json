@@ -1,0 +1,15 @@
+{
+  "input": {
+    "customer_name": "Annu Sethi",
+    "zone": "Sushant Lok",
+    "trigger_type": "breaking",
+    "is_followup": false,
+    "rationale": "Orders every 3.5d, silent 14d (4.0x).",
+    "order_count": 7,
+    "last_order_products": ["Afghan Cherry", "Chausa Mango"],
+    "favourite_products": ["Afghan Cherry", "Chausa Mango", "Jamun"],
+    "todays_catalogue_highlights": ["Pomegranate", "Muscat Grapes"],
+    "seasonal_note": null
+  },
+  "expectMentionsAnyOf": ["Afghan Cherry", "Chausa Mango", "Jamun", "7"]
+}

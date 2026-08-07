@@ -1,0 +1,15 @@
+{
+  "input": {
+    "customer_name": "Sanjana Rao",
+    "zone": "Near Hamilton Court",
+    "trigger_type": "breaking",
+    "is_followup": true,
+    "rationale": "Orders every 4d, silent 16d (4.0x). (follow-up -- prior message unanswered)",
+    "order_count": 5,
+    "last_order_products": ["Langra Mango", "Jamun"],
+    "favourite_products": ["Langra Mango", "Jamun"],
+    "todays_catalogue_highlights": ["Muscat Grapes"],
+    "seasonal_note": null
+  },
+  "expectMentionsAnyOf": ["Langra Mango", "Jamun", "5"]
+}

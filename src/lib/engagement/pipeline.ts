@@ -1,8 +1,7 @@
 // CLAUDE_engagement_engine_FINAL.md §5: the nightly pipeline. STEP 1, STEP 2,
-// and STEP 3+5 (queue generation, scoped per §13 slice 3 to breaking/
-// third_order_risk only -- STEP 4 drafting isn't built yet). Order matters:
-// STEP 3 reads eng_customer_state, so it must run after STEP 1 has refreshed
-// it this run.
+// and STEP 3+4+5 (queue generation + drafting, scoped per §13 slice 4 to
+// breaking/third_order_risk only). Order matters: STEP 3 reads
+// eng_customer_state, so it must run after STEP 1 has refreshed it this run.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";

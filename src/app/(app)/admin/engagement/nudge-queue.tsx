@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Phone, Check, X, Clock } from "lucide-react";
+import { Phone, Check, X, Clock, Pencil } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ export interface NudgeQueueRow {
   recommendedAction: "message" | "call" | "skip_no_phone";
   priorityScore: number;
   rationale: string;
+  draftMessage: string | null;
+  draftRationale: string | null;
 }
 
 const TRIGGER_LABEL: Record<string, string> = {
@@ -40,12 +42,17 @@ const TRIGGER_TONE: Record<string, BadgeTone> = {
   vip_checkin: "brand",
 };
 
-// §13 slice 3: no draft_message exists yet (that's slice 4) -- Relay here
-// means "admin messaged them in their own words, using the rationale as the
-// cue, then logs it" so STEP 2's outcome tracking (slice 2) has real relays
-// to measure. Edit isn't offered since there's nothing drafted to edit.
+// §13 slice 4: draft_message now exists for most `message` candidates (§9).
+// Relay sends the draft as-is (finalMessage = draftMessage); Edit swaps the
+// draft into an editable textarea so the admin can tweak it before Save &
+// Relay sends the edited text as finalMessage. No-draft rows (skip_no_phone,
+// or a failed draft call) fall back to slice 3's behaviour exactly: Relay
+// with no finalMessage, admin messages in their own words using the
+// rationale as the cue.
 function NudgeCard({ row, onActioned }: { row: NudgeQueueRow; onActioned: () => void }) {
   const [isPending, startTransition] = useTransition();
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedText, setEditedText] = useState(row.draftMessage ?? "");
   const { showToast } = useToast();
 
   function run(action: () => Promise<{ ok: true } | { ok: false; error: string }>, doneMessage: string) {
@@ -82,6 +89,23 @@ function NudgeCard({ row, onActioned }: { row: NudgeQueueRow; onActioned: () => 
 
       <p className="font-sans text-[12.5px] font-medium text-foreground">{row.rationale}</p>
 
+      {row.draftMessage &&
+        (isEditing ? (
+          <textarea
+            rows={4}
+            value={editedText}
+            onChange={(e) => setEditedText(e.target.value)}
+            className="w-full rounded-2xl border-[1.5px] border-[#ECEAE3] bg-[#F1F1EE] p-3 font-sans text-[13.5px] font-medium leading-[1.55] text-foreground focus:outline-none"
+          />
+        ) : (
+          <div className="rounded-2xl rounded-bl-[4px] bg-[#DCF3D5] p-3">
+            <p className="whitespace-pre-wrap font-sans text-[13px] leading-[1.6] text-foreground">{row.draftMessage}</p>
+          </div>
+        ))}
+      {row.draftRationale && !isEditing && (
+        <p className="font-sans text-[11px] font-medium text-muted">why: {row.draftRationale}</p>
+      )}
+
       <div className="flex items-center justify-between pt-1 gap-2 flex-wrap">
         {row.phone ? (
           <a href={`tel:${row.phone}`} className="inline-flex items-center gap-1 font-sans text-[12.5px] font-bold text-brand">
@@ -92,35 +116,66 @@ function NudgeCard({ row, onActioned }: { row: NudgeQueueRow; onActioned: () => 
           <span className="font-sans text-[11.5px] font-bold text-danger-text">No phone on file</span>
         )}
 
-        <div className="flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="dark"
-            disabled={isPending}
-            onClick={() => run(() => relayNudge(row.nudgeId), "Marked relayed")}
-          >
-            <Check className="size-3.5" aria-hidden="true" />
-            Relay
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={isPending}
-            onClick={() => run(() => snoozeNudge(row.nudgeId), "Snoozed 3d")}
-          >
-            <Clock className="size-3.5" aria-hidden="true" />
-            Snooze
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={isPending}
-            onClick={() => run(() => skipNudge(row.nudgeId), "Skipped")}
-          >
-            <X className="size-3.5" aria-hidden="true" />
-            Skip
-          </Button>
-        </div>
+        {isEditing ? (
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="dark"
+              disabled={isPending}
+              onClick={() => run(() => relayNudge(row.nudgeId, editedText), "Marked relayed")}
+            >
+              <Check className="size-3.5" aria-hidden="true" />
+              Save & Relay
+            </Button>
+            <Button size="sm" variant="ghost" disabled={isPending} onClick={() => setIsEditing(false)}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="dark"
+              disabled={isPending}
+              onClick={() => run(() => relayNudge(row.nudgeId, row.draftMessage ?? undefined), "Marked relayed")}
+            >
+              <Check className="size-3.5" aria-hidden="true" />
+              Relay
+            </Button>
+            {row.draftMessage && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={isPending}
+                onClick={() => {
+                  setEditedText(row.draftMessage ?? "");
+                  setIsEditing(true);
+                }}
+              >
+                <Pencil className="size-3.5" aria-hidden="true" />
+                Edit
+              </Button>
+            )}
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={isPending}
+              onClick={() => run(() => snoozeNudge(row.nudgeId), "Snoozed 3d")}
+            >
+              <Clock className="size-3.5" aria-hidden="true" />
+              Snooze
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={isPending}
+              onClick={() => run(() => skipNudge(row.nudgeId), "Skipped")}
+            >
+              <X className="size-3.5" aria-hidden="true" />
+              Skip
+            </Button>
+          </div>
+        )}
       </div>
     </Card>
   );

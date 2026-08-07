@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "eval:price-parser": "tsx --env-file=.env.local scripts/eval-price-parser.ts",
     "eval:order-parser": "tsx --env-file=.env.local scripts/eval-order-parser.ts",
+    "eval:nudge-drafter": "tsx --env-file=.env.local scripts/eval-nudge-drafter.ts",
     "import:customers": "tsx --env-file=.env.local scripts/import-customers.ts",
     "import:historical-orders": "tsx --env-file=.env.local scripts/import_historical_orders.ts",
     "create:staff-user": "tsx --env-file=.env.local scripts/create-staff-user.ts"
