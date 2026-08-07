@@ -5,9 +5,11 @@ import { computePriorityScore, isVipCheckin, type TriggerType } from "@/lib/enga
 import type { EngagementState } from "@/lib/engagement/classify";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
+import { loadOutcomeStats } from "@/lib/engagement/outcome-stats";
 import { EngagementList, type EngagementRow } from "./engagement-list";
 import { NudgeQueue, type NudgeQueueRow } from "./nudge-queue";
 import { SeasonalNoteEditor } from "./seasonal-note-editor";
+import { OutcomeStats } from "./outcome-stats";
 
 // CLAUDE_engagement_engine_FINAL.md §13: slice 1's read-only priority browse
 // view (over eng_customer_state) plus slice 4's actionable daily queue
@@ -19,7 +21,7 @@ export default async function AdminEngagementPage() {
   const supabase = await createClient();
   const todayIso = utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
-  const [{ data: states }, { data: customers }, { data: configRows }, { data: queueRows }, { data: settingsRow }] =
+  const [{ data: states }, { data: customers }, { data: configRows }, { data: queueRows }, { data: settingsRow }, outcomeStats] =
     await Promise.all([
       supabase.from("eng_customer_state").select("*"),
       supabase.from("customers").select("id, display_name, phone, zone"),
@@ -32,6 +34,7 @@ export default async function AdminEngagementPage() {
         .or(`status.eq.pending,and(status.eq.snoozed,snooze_until.lte.${todayIso})`)
         .order("priority_score", { ascending: false }),
       supabase.from("eng_settings").select("seasonal_note").eq("id", 1).maybeSingle(),
+      loadOutcomeStats(supabase),
     ]);
 
   const config = configRows && configRows.length > 0 ? buildEngagementConfig(configRows) : null;
@@ -104,6 +107,7 @@ export default async function AdminEngagementPage() {
         <p className="font-sans text-[13px] font-bold text-muted">All customers by priority</p>
         <EngagementList rows={rows} computedAt={computedAt} hasConfig={config !== null} />
       </div>
+      <OutcomeStats rows={outcomeStats} />
     </div>
   );
 }
