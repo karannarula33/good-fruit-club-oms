@@ -19,7 +19,18 @@ import { parse } from "csv-parse/sync";
 import { deriveZoneFromAddress, type Zone } from "../src/lib/customers/zone";
 import { createServiceRoleClient } from "../src/lib/supabase/service-role";
 
-const GO_LIVE_CUTOFF_ISO = "2026-08-06"; // strictly-before this date is imported (§12.2.3)
+// Strictly-before this date is always imported unconditionally (§12.2.3).
+// Real app adoption didn't happen on a single clean day -- the team kept
+// using the sheet in parallel for a few days after the app went live, so
+// this alone isn't enough to avoid double-counting; see the real-order
+// dedup below, which covers the gap right up to IMPORT_WINDOW_END_ISO.
+const GO_LIVE_CUTOFF_ISO = "2026-08-06";
+// Sheet rows on/after GO_LIVE_CUTOFF_ISO but strictly-before this are only
+// imported if no real (non-historical) order already exists for that same
+// customer + IST calendar date -- covers the Aug 6-13 parallel-running
+// period where some customers' orders went through the app and some
+// didn't. Bump this forward as later sheet exports arrive.
+const IMPORT_WINDOW_END_ISO = "2026-08-14";
 
 // Fruit-column labels that are adjustments, not products -- excluded from
 // order_lines, folded into the order's notes instead.
@@ -86,7 +97,12 @@ function parseSheet(csvPath: string): { orders: SheetOrder[]; skippedFooterRows:
     // block, whose "date" column doesn't parse as a real date.
     if (rawDate && toIso(rawDate)) currentDate = rawDate;
     if (rawNum) currentNum = rawNum;
-    if (rawCustomer) currentCustomer = rawCustomer;
+    // A non-blank customer name always starts a NEW order (continuation
+    // rows for the same order leave this blank) -- reset phone/address
+    // first so a returning customer whose contact info is omitted in this
+    // row doesn't silently inherit the PREVIOUS, unrelated customer's
+    // phone/address instead of correctly resolving to null/blank here.
+    if (rawCustomer) { currentCustomer = rawCustomer; currentPhone = ""; currentAddress = ""; }
     if (rawPhone && normalizePhone(rawPhone)) currentPhone = rawPhone;
     if (rawAddress) currentAddress = rawAddress;
 
@@ -130,11 +146,26 @@ async function main() {
   const { orders: sheetOrders, skippedFooterRows } = parseSheet(csvPath);
   console.log(`Parsed ${sheetOrders.length} orders from the sheet (${skippedFooterRows} footer/summary rows skipped).`);
 
-  const beforeCutoff = sheetOrders.filter((o) => (toIso(o.date) ?? "9999-99-99") < GO_LIVE_CUTOFF_ISO);
-  const onOrAfterCutoff = sheetOrders.length - beforeCutoff.length;
-  console.log(`${beforeCutoff.length} orders strictly before cutoff (${GO_LIVE_CUTOFF_ISO}); ${onOrAfterCutoff} on/after cutoff excluded.\n`);
+  const inWindow = sheetOrders.filter((o) => (toIso(o.date) ?? "9999-99-99") < IMPORT_WINDOW_END_ISO);
+  const afterWindow = sheetOrders.length - inWindow.length;
+  console.log(`${inWindow.length} orders strictly before ${IMPORT_WINDOW_END_ISO}; ${afterWindow} on/after that excluded.\n`);
 
   const supabase = createServiceRoleClient();
+
+  // Orders already entered through the app (real, non-historical) during
+  // the parallel-running window -- used below to skip sheet rows that
+  // would otherwise duplicate a same-customer/same-day app order.
+  function toIstDate(utcIso: string): string {
+    return new Date(new Date(utcIso).getTime() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  }
+  const { data: realOrders } = await supabase
+    .from("orders")
+    .select("customer_id, placed_at")
+    .eq("is_historical", false)
+    .gte("placed_at", `${GO_LIVE_CUTOFF_ISO}T00:00:00+05:30`);
+  const realOrderCustomerDates = new Set(
+    (realOrders ?? []).map((o) => `${o.customer_id}__${toIstDate(o.placed_at)}`),
+  );
 
   const [{ data: products }, { data: aliases }] = await Promise.all([
     supabase.from("products").select("id, name"),
@@ -156,7 +187,31 @@ async function main() {
   const newCustomers: { key: string; display_name: string; phone: string | null; address: string; zone: Zone }[] = [];
   const customerKeyToId = new Map<string, string>();
 
+  // One-time manual resolution for sheet rows whose customer name doesn't
+  // match any existing customer by phone or exact display_name -- these
+  // are shortened names, typos, or a household member ordering under a
+  // different name, confirmed against the Orders (2) sheet by the business
+  // owner on 2026-08-13. Keyed by the sheet's raw customer string
+  // (case-insensitive).
+  const CUSTOMER_NAME_OVERRIDES: Record<string, string> = {
+    "shirley": "d8bf4046-0363-4174-8786-da1d58d9b49c", // Shirley Swarup
+    "anju": "bb8923e5-005d-4545-bb25-91d18e19083f", // Anju (Sachin Bansal)
+    "madhu": "587b0d36-4150-4186-b247-a28098991f31", // Madhu Oakwood
+    "simran": "2924b1be-f0f9-4eea-a239-b36201132c1b", // Simran Soni
+    "gundeep": "51d44752-b60d-4c20-bb4c-fac00643ba9d", // Gundeep Thakar
+    "samander": "101bf0d4-efca-4c50-b3d4-bc721e2cbf79", // Samander Chohan
+    "nc bansal": "7e7320fb-19f6-4f1b-a1e5-f5bd5e9f5ec3", // Dr. NC Bansal
+    "sunita gupta": "35c84dac-304f-45c3-b147-5801c62b57e4", // Pradeep Gupta (household)
+    "rakesh chopra": "d43116fc-3735-4915-93f9-0abdb55b2fe5", // Dr Rakesh Chopra
+    "shilpa orhi": "8c8c3c56-d58b-494b-8562-aa35a5eb094d", // Shilpa Ohri (sheet typo)
+    "vikash": "61eba6c5-2aa3-4cd2-aac2-fd2c776590fa", // Vikash Bhagchandka
+    "punam": "c9a3c723-5b07-4fb7-86e2-b7b84f581deb", // Punam (Central Park 1)
+    "kinshuk / konika kumar": "9e0181b0-cadf-4cab-a970-e8e33f152766", // Konika Kumar (son, same household)
+  };
+
   function customerKeyFor(o: SheetOrder): { key: string; existingId: string | null } {
+    const override = CUSTOMER_NAME_OVERRIDES[o.customer.toLowerCase()];
+    if (override) return { key: `override:${o.customer.toLowerCase()}`, existingId: override };
     const normPhone = o.phone ? normalizePhone(o.phone) : null;
     if (normPhone && customerByPhone.has(normPhone)) {
       return { key: `phone:${normPhone}`, existingId: customerByPhone.get(normPhone)!.id };
@@ -179,10 +234,22 @@ async function main() {
   }
   const planned: PlannedOrder[] = [];
 
-  for (const o of beforeCutoff) {
+  for (const o of inWindow) {
     const iso = toIso(o.date);
     if (!iso) { skippedOrders.push({ order: o, reason: "unparseable date" }); continue; }
-    if (!o.address) { skippedOrders.push({ order: o, reason: "missing address" }); continue; }
+
+    // Address is only required to CREATE a new customer -- a returning
+    // customer already has one on file, and this sheet row may have
+    // omitted phone/address entirely (see the forward-fill reset above).
+    const { key, existingId } = customerKeyFor(o);
+    if (!existingId && !o.address) { skippedOrders.push({ order: o, reason: "missing address (new customer)" }); continue; }
+
+    if (iso >= GO_LIVE_CUTOFF_ISO) {
+      if (existingId && realOrderCustomerDates.has(`${existingId}__${iso}`)) {
+        skippedOrders.push({ order: o, reason: "already captured by a real app order (same customer + day)" });
+        continue;
+      }
+    }
 
     let hadUnresolvedProduct = false;
     const lines: PlannedOrder["lines"] = [];
@@ -231,7 +298,6 @@ async function main() {
     if (hadUnresolvedProduct) { skippedOrders.push({ order: o, reason: "unresolved product / bad line data" }); continue; }
     if (lines.length === 0) { skippedOrders.push({ order: o, reason: "no importable lines" }); continue; }
 
-    const { key, existingId } = customerKeyFor(o);
     if (!existingId && !customerKeyToId.has(key) && !newCustomers.some((c) => c.key === key)) {
       newCustomers.push({ key, display_name: o.customer, phone: o.phone, address: o.address, zone: deriveZoneFromAddress(o.address) });
     }
