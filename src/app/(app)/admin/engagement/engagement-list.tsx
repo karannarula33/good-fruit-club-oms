@@ -1,13 +1,9 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
-import { RefreshCw, Phone } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Phone } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { useToast } from "@/components/ui/toast";
-import { formatIstDisplay } from "@/lib/time/ist";
-import { recomputeEngagementState } from "@/app/actions/engagement";
 import { buildRationale } from "@/lib/engagement/rationale";
 import type { EngagementState } from "@/lib/engagement/classify";
 import type { CustomerZone } from "@/lib/supabase/database.types";
@@ -72,69 +68,15 @@ function hasTrigger(row: EngagementRow): boolean {
   return row.vipCheckin || !["habituated", "first_timer", "prospect"].includes(row.state);
 }
 
-export function EngagementList({ rows, computedAt, hasConfig }: { rows: EngagementRow[]; computedAt: string | null; hasConfig: boolean }) {
-  const [isPending, startTransition] = useTransition();
-  const { showToast } = useToast();
+export function EngagementList({ rows }: { rows: EngagementRow[] }) {
   const [showAll, setShowAll] = useState(false);
 
-  const { surfaced, stateCounts } = useMemo(() => {
-    const surfaced = rows.filter(hasTrigger);
-    const counts = new Map<string, number>();
-    for (const row of rows) counts.set(row.vipCheckin ? "vip_checkin" : row.state, (counts.get(row.vipCheckin ? "vip_checkin" : row.state) ?? 0) + 1);
-    return { surfaced, stateCounts: counts };
-  }, [rows]);
+  const surfaced = useMemo(() => rows.filter(hasTrigger), [rows]);
 
   const visible = showAll ? rows : surfaced;
 
-  function handleRecompute() {
-    startTransition(async () => {
-      const result = await recomputeEngagementState();
-      if (result.ok) {
-        const { state, outcomes } = result.summary;
-        const outcomeNote = outcomes.evaluated > 0 ? `, ${outcomes.evaluated} outcomes evaluated` : "";
-        showToast(`Recomputed ${state.customersProcessed} customers${outcomeNote}`);
-      } else {
-        showToast(result.error);
-      }
-    });
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <Card className="flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <p className="font-sans text-xs font-bold text-muted">
-              {computedAt ? `Last computed ${formatIstDisplay(new Date(computedAt))}` : "Never computed yet"}
-            </p>
-            {!hasConfig && (
-              <p className="mt-1 font-sans text-xs font-bold text-danger-text">
-                eng_config is empty -- recompute will fail until it&rsquo;s seeded.
-              </p>
-            )}
-          </div>
-          <Button size="sm" variant="dark" pending={isPending} pendingText="Recomputing..." onClick={handleRecompute}>
-            <RefreshCw className="size-4" aria-hidden="true" />
-            Recompute now
-          </Button>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {(["lapsed", "breaking", "third_order_risk", "second_order_risk", "vip_checkin", "drifting"] as const).map(
-            (key) => {
-              const count = stateCounts.get(key) ?? 0;
-              if (count === 0) return null;
-              const label = key === "vip_checkin" ? "VIP check-in" : STATE_LABEL[key as EngagementState];
-              const tone = key === "vip_checkin" ? "brand" : STATE_TONE[key as EngagementState];
-              return (
-                <Badge key={key} tone={tone} size="sm">
-                  {count} {label}
-                </Badge>
-              );
-            },
-          )}
-        </div>
-      </Card>
-
       <div className="flex items-center justify-between">
         <p className="font-sans text-[13px] font-bold text-foreground">
           {showAll ? `All ${rows.length} customers` : `${surfaced.length} need attention`}

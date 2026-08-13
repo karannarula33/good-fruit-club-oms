@@ -10,6 +10,7 @@ import { EngagementList, type EngagementRow } from "./engagement-list";
 import { NudgeQueue, type NudgeQueueRow } from "./nudge-queue";
 import { SeasonalNoteEditor } from "./seasonal-note-editor";
 import { OutcomeStats } from "./outcome-stats";
+import { RecomputePanel } from "./recompute-panel";
 
 // CLAUDE_engagement_engine_FINAL.md §13: slice 1's read-only priority browse
 // view (over eng_customer_state) plus slice 4's actionable daily queue
@@ -77,6 +78,12 @@ export default async function AdminEngagementPage() {
 
   const computedAt = rows[0]?.computedAt ?? null;
 
+  const stateCounts: Record<string, number> = {};
+  for (const row of rows) {
+    const key = row.vipCheckin ? "vip_checkin" : row.state;
+    stateCounts[key] = (stateCounts[key] ?? 0) + 1;
+  }
+
   const nudgeRows: NudgeQueueRow[] = (queueRows ?? [])
     .map((q) => {
       const customer = customerById.get(q.customer_id);
@@ -101,11 +108,12 @@ export default async function AdminEngagementPage() {
   return (
     <div className="flex flex-col gap-6 px-[18px] pt-5 pb-6">
       <PageHeader title="Engagement" subtitle="Who to reach out to, and why" />
+      <RecomputePanel computedAt={computedAt} hasConfig={config !== null} stateCounts={stateCounts} />
       <SeasonalNoteEditor initialNote={settingsRow?.seasonal_note ?? null} />
       <NudgeQueue rows={nudgeRows} />
       <div className="flex flex-col gap-3">
         <p className="font-sans text-[13px] font-bold text-muted">All customers by priority</p>
-        <EngagementList rows={rows} computedAt={computedAt} hasConfig={config !== null} />
+        <EngagementList rows={rows} />
       </div>
       <OutcomeStats rows={outcomeStats} />
     </div>

@@ -27,6 +27,7 @@ const TABS: Record<Role, { href: string; label: string }[]> = {
     { href: "/delivery", label: "Route" },
     { href: "/status", label: "Status" },
     { href: "/admin/customers", label: "Ledger" },
+    { href: "/admin/engagement", label: "Engagement" },
     { href: "/admin/manage-orders", label: "Manage" },
   ],
   packer: [
