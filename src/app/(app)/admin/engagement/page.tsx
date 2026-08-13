@@ -22,6 +22,21 @@ export default async function AdminEngagementPage() {
   const supabase = await createClient();
   const todayIso = utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
+  // "Today's queue" means the most recent recompute's candidates, not every
+  // pending row ever inserted -- a customer's state can be recomputed
+  // several times a day (e.g. a manual "Refresh nudges" after a data fix),
+  // and an older run's now-superseded pending row must not keep outranking
+  // or duplicating the fresh one for the same customer. Snoozed rows are
+  // the one deliberate exception: they're meant to resurface on their own
+  // schedule regardless of which run created them.
+  const { data: latestRunRow } = await supabase
+    .from("eng_nudge_queue")
+    .select("run_date")
+    .order("run_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const latestRunDate = latestRunRow?.run_date ?? todayIso;
+
   const [{ data: states }, { data: customers }, { data: configRows }, { data: queueRows }, { data: settingsRow }, outcomeStats] =
     await Promise.all([
       supabase.from("eng_customer_state").select("*"),
@@ -32,7 +47,7 @@ export default async function AdminEngagementPage() {
         .select(
           "id, customer_id, trigger_type, recommended_action, priority_score, rationale, draft_message, draft_rationale, status, snooze_until",
         )
-        .or(`status.eq.pending,and(status.eq.snoozed,snooze_until.lte.${todayIso})`)
+        .or(`and(status.eq.pending,run_date.eq.${latestRunDate}),and(status.eq.snoozed,snooze_until.lte.${todayIso})`)
         .order("priority_score", { ascending: false }),
       supabase.from("eng_settings").select("seasonal_note").eq("id", 1).maybeSingle(),
       loadOutcomeStats(supabase),
