@@ -7,6 +7,7 @@ import { resolvePriceForProduct } from "@/lib/pricing/resolve";
 import { computeBillTotal, computeCustomerBalance, computeNetDue } from "@/lib/billing/compute";
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
 import { planAdvanceAllocation, type AdvanceCredit } from "@/lib/billing/allocate";
+import { validatePriceOverride } from "@/lib/billing/override";
 
 export type GenerateBillResult =
   | { ok: true; messageText: string; customerPhone: string | null }
@@ -204,4 +205,69 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
   // src/app/actions/packing.ts. The packer needs the "Send bill" button
   // to stay on screen until they explicitly tap "Done".
   return { ok: true, messageText, customerPhone: customer.phone };
+}
+
+export type OverrideLinePriceResult = { ok: true } | { ok: false; error: string };
+
+// Admin-only, deliberate exception to CLAUDE.md §3.1's price-lock rule --
+// see validatePriceOverride for the eligibility guards and the audit trail
+// this writes to price_overrides (migration 0016).
+export async function overrideLinePrice(
+  orderLineId: string,
+  newPrice: number,
+  reason: string,
+): Promise<OverrideLinePriceResult> {
+  const profile = await requireRole(["admin"]);
+  const supabase = await createClient();
+
+  const { data: line, error: lineError } = await supabase
+    .from("order_lines")
+    .select("id, order_id, locked_price_per_unit, line_status, orders(status)")
+    .eq("id", orderLineId)
+    .single();
+  if (lineError || !line) {
+    return { ok: false, error: lineError?.message ?? "Line not found." };
+  }
+  const order = line.orders as unknown as { status: string } | null;
+
+  const { data: existingBill } = await supabase
+    .from("bills")
+    .select("id")
+    .eq("order_id", line.order_id)
+    .maybeSingle();
+
+  const validation = validatePriceOverride({
+    newPrice,
+    reason,
+    orderStatus: order?.status ?? "",
+    lineStatus: line.line_status,
+    hasBill: existingBill != null,
+  });
+  if (!validation.ok) {
+    return validation;
+  }
+
+  const { error: overrideError } = await supabase.from("price_overrides").insert({
+    order_line_id: orderLineId,
+    previous_price: line.locked_price_per_unit,
+    new_price: newPrice,
+    reason: reason.trim(),
+    overridden_by: profile.id,
+  });
+  if (overrideError) {
+    return { ok: false, error: overrideError.message };
+  }
+
+  const { error: updateError } = await supabase
+    .from("order_lines")
+    .update({ locked_price_per_unit: newPrice })
+    .eq("id", orderLineId);
+  if (updateError) {
+    return { ok: false, error: updateError.message };
+  }
+
+  // No revalidatePath here either -- same reasoning as finalizeOrder; the
+  // packer/admin client calls router.refresh() itself after a successful
+  // override so the price shown before "Generate Bill →" updates in place.
+  return { ok: true };
 }

@@ -3,9 +3,9 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from "motion/react";
-import { ChevronLeft, PackageCheck, Ban, MessageCircle, XCircle } from "lucide-react";
+import { ChevronLeft, PackageCheck, Ban, MessageCircle, XCircle, Pencil } from "lucide-react";
 import { finalizeOrder } from "@/app/actions/packing";
-import { generateBill } from "@/app/actions/bills";
+import { generateBill, overrideLinePrice } from "@/app/actions/bills";
 import { toWhatsAppDigits } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -324,6 +324,93 @@ function EditableDetail({
   );
 }
 
+function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const [priceInput, setPriceInput] = useState("");
+  const [reasonInput, setReasonInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const price = line.lockedPricePerUnit ?? 0;
+  const qty = line.actualQty ?? 0;
+
+  function startEditing() {
+    setPriceInput(price ? String(price) : "");
+    setReasonInput("");
+    setError(null);
+    setEditing(true);
+  }
+
+  function handleSave() {
+    setError(null);
+    startTransition(async () => {
+      const result = await overrideLinePrice(line.id, Number(priceInput), reasonInput);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setEditing(false);
+      onOverridden();
+    });
+  }
+
+  if (editing) {
+    return (
+      <Card elevated className="!space-y-2">
+        <div className="font-sans text-sm font-bold text-foreground">{line.productName}</div>
+        <div className="flex gap-2">
+          <Input
+            size="lg"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="New price / unit"
+            value={priceInput}
+            onChange={(e) => setPriceInput(e.target.value)}
+            className="w-32"
+          />
+          <Input
+            size="lg"
+            placeholder="Reason (required)"
+            value={reasonInput}
+            onChange={(e) => setReasonInput(e.target.value)}
+            className="flex-1"
+          />
+        </div>
+        {error && <FormError>{error}</FormError>}
+        <div className="flex gap-2">
+          <Button variant="secondary" fullWidth onClick={() => setEditing(false)} disabled={pending}>
+            Cancel
+          </Button>
+          <Button variant="dark" fullWidth onClick={handleSave} pending={pending} pendingText="Saving…">
+            Save price
+          </Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card elevated className="flex items-center justify-between !space-y-0">
+      <div>
+        <div className="font-sans text-sm font-bold text-foreground">{line.productName}</div>
+        <div className="flex items-center gap-1.5 font-sans text-[11.5px] font-semibold text-muted">
+          {qty} {line.unitLabel ?? ""} @ ₹{price.toFixed(2)}
+          <button
+            type="button"
+            onClick={startEditing}
+            aria-label={`Edit price for ${line.productName}`}
+            className="text-tertiary"
+          >
+            <Pencil className="size-3" />
+          </button>
+        </div>
+      </div>
+      <div className="font-display text-sm font-bold text-foreground">₹{(qty * price).toFixed(2)}</div>
+    </Card>
+  );
+}
+
 function PackedDetail({
   order,
   isAdmin,
@@ -335,6 +422,7 @@ function PackedDetail({
   onBack: () => void;
   onBillGenerated: (bill: { messageText: string; customerPhone: string | null }) => void;
 }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const packedLines = order.lines.filter((l) => l.lineStatus === "packed");
@@ -360,21 +448,9 @@ function PackedDetail({
             ✓ Packed — ready to bill
           </div>
           <div className="flex flex-col gap-2">
-            {packedLines.map((line) => {
-              const price = line.lockedPricePerUnit ?? 0;
-              const qty = line.actualQty ?? 0;
-              return (
-                <Card key={line.id} elevated className="flex items-center justify-between !space-y-0">
-                  <div>
-                    <div className="font-sans text-sm font-bold text-foreground">{line.productName}</div>
-                    <div className="font-sans text-[11.5px] font-semibold text-muted">
-                      {qty} {line.unitLabel ?? ""} @ ₹{price.toFixed(2)}
-                    </div>
-                  </div>
-                  <div className="font-display text-sm font-bold text-foreground">₹{(qty * price).toFixed(2)}</div>
-                </Card>
-              );
-            })}
+            {packedLines.map((line) => (
+              <PackedLineRow key={line.id} line={line} onOverridden={() => router.refresh()} />
+            ))}
           </div>
           {error && <FormError>{error}</FormError>}
           <Button variant="primary" fullWidth onClick={handleGenerateBill} pending={pending} pendingText="Generating…">

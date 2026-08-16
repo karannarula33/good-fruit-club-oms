@@ -321,6 +321,36 @@ export interface Database {
         };
         Relationships: [];
       };
+      price_overrides: {
+        Row: {
+          id: string;
+          order_line_id: string;
+          previous_price: number | null;
+          new_price: number;
+          reason: string;
+          overridden_by: string | null;
+          overridden_at: string;
+        };
+        Insert: {
+          id?: string;
+          order_line_id: string;
+          previous_price?: number | null;
+          new_price: number;
+          reason: string;
+          overridden_by?: string | null;
+          overridden_at?: string;
+        };
+        Update: {
+          id?: string;
+          order_line_id?: string;
+          previous_price?: number | null;
+          new_price?: number;
+          reason?: string;
+          overridden_by?: string | null;
+          overridden_at?: string;
+        };
+        Relationships: [];
+      };
       bills: {
         Row: {
           id: string;
