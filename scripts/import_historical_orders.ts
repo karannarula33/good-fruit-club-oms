@@ -30,7 +30,11 @@ const GO_LIVE_CUTOFF_ISO = "2026-08-06";
 // customer + IST calendar date -- covers the Aug 6-13 parallel-running
 // period where some customers' orders went through the app and some
 // didn't. Bump this forward as later sheet exports arrive.
-const IMPORT_WINDOW_END_ISO = "2026-08-14";
+// 2026-08-19: bumped 08-14 -> 08-19 for the Orders (3) export, which adds
+// rows through 18-Aug-26 -- covers the 08-14/08-15/08-18 gap where the app
+// had zero real orders on record (08-15 has none in the sheet either, so
+// that day genuinely had no orders, not a data gap).
+const IMPORT_WINDOW_END_ISO = "2026-08-19";
 
 // Fruit-column labels that are adjustments, not products -- excluded from
 // order_lines, folded into the order's notes instead.
