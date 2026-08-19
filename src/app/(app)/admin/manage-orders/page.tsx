@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
 import { DateNav } from "@/components/ui/date-nav";
+import { OrderExportPanel } from "./order-export-panel";
 import { ManageOrdersList, type ManageOrderRow } from "./manage-orders-list";
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
@@ -80,6 +81,7 @@ export default async function ManageOrdersPage({
         subtitle="Delete test or wrongly entered orders"
         action={<DateNav date={date} basePath="/admin/manage-orders" />}
       />
+      <OrderExportPanel date={date} />
       <ManageOrdersList rows={rows} />
     </div>
   );
