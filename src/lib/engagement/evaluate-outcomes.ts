@@ -7,6 +7,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";
 import { evaluateNudgeOutcome } from "./outcomes";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 
 type Client = SupabaseClient<Database>;
 
@@ -54,13 +55,19 @@ export async function runOutcomeEvaluation(supabase: Client): Promise<OutcomeEva
   const customerIds = [...new Set(pending.map((r) => r.customer_id))];
   const ordersByCustomer = new Map<string, { id: string; placedAt: Date }[]>();
   for (let i = 0; i < customerIds.length; i += FETCH_CHUNK) {
-    const { data: orders, error: ordersError } = await supabase
-      .from("orders")
-      .select("id, customer_id, placed_at")
-      .neq("status", "cancelled")
-      .in("customer_id", customerIds.slice(i, i + FETCH_CHUNK));
-    if (ordersError) throw new Error(`Failed to load orders chunk ${i}: ${ordersError.message}`);
-    for (const order of orders ?? []) {
+    const chunkIds = customerIds.slice(i, i + FETCH_CHUNK);
+    // Paginated (fetchAllRows) -- a chunk of 200 customers can still carry
+    // well over 1000 combined orders once history grows (see recompute.ts's
+    // identical fix), and a bare .select() silently drops rows past that.
+    const orders = await fetchAllRows<{ id: string; customer_id: string; placed_at: string }>((from, to) =>
+      supabase
+        .from("orders")
+        .select("id, customer_id, placed_at")
+        .neq("status", "cancelled")
+        .in("customer_id", chunkIds)
+        .range(from, to),
+    );
+    for (const order of orders) {
       const bucket = ordersByCustomer.get(order.customer_id) ?? [];
       bucket.push({ id: order.id, placedAt: new Date(order.placed_at) });
       ordersByCustomer.set(order.customer_id, bucket);

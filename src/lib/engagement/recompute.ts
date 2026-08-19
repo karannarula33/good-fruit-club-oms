@@ -8,6 +8,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import { buildEngagementConfig } from "./config";
 import { computeCustomerState, lineValue, type EngagementOrderInput } from "./classify";
 import { attachRevenuePercentiles } from "./priority";
+import { fetchAllRows } from "@/lib/supabase/paginate";
 
 type Client = SupabaseClient<Database>;
 
@@ -29,11 +30,14 @@ export async function runEngagementRecompute(supabase: Client): Promise<Recomput
   const config = buildEngagementConfig(configRows ?? []);
 
   // §1: order-level activity keys off placed_at, excludes cancelled orders.
-  const { data: orders, error: ordersError } = await supabase
-    .from("orders")
-    .select("id, customer_id, placed_at")
-    .neq("status", "cancelled");
-  if (ordersError) throw new Error(`Failed to load orders: ${ordersError.message}`);
+  // Paginated (fetchAllRows): order count crossed PostgREST's 1000-row
+  // default page cap after the Aug 2026 historical backfill, and a bare
+  // .select() here was silently dropping everything past row 1000 --
+  // corrupting daysSinceLast/severityRatio for whichever customers' orders
+  // fell outside the truncated page.
+  const orders = await fetchAllRows<{ id: string; customer_id: string; placed_at: string }>((from, to) =>
+    supabase.from("orders").select("id, customer_id, placed_at").neq("status", "cancelled").range(from, to),
+  );
 
   // Chunked: a single .in() with 500+ UUIDs blows the request URL length
   // limit (each id is ~37 chars once URL-encoded) once order history grows,
@@ -43,12 +47,21 @@ export async function runEngagementRecompute(supabase: Client): Promise<Recomput
   const FETCH_CHUNK = 200;
   const lines: { order_id: string; product_id: string | null; ordered_qty: number | null; actual_qty: number | null; locked_price_per_unit: number | null }[] = [];
   for (let i = 0; i < orderIds.length; i += FETCH_CHUNK) {
-    const { data, error } = await supabase
-      .from("order_lines")
-      .select("order_id, product_id, ordered_qty, actual_qty, locked_price_per_unit")
-      .in("order_id", orderIds.slice(i, i + FETCH_CHUNK));
-    if (error) throw new Error(`Failed to load order_lines chunk ${i}: ${error.message}`);
-    lines.push(...(data ?? []));
+    const chunkIds = orderIds.slice(i, i + FETCH_CHUNK);
+    const data = await fetchAllRows<{
+      order_id: string;
+      product_id: string | null;
+      ordered_qty: number | null;
+      actual_qty: number | null;
+      locked_price_per_unit: number | null;
+    }>((from, to) =>
+      supabase
+        .from("order_lines")
+        .select("order_id, product_id, ordered_qty, actual_qty, locked_price_per_unit")
+        .in("order_id", chunkIds)
+        .range(from, to),
+    );
+    lines.push(...data);
   }
 
   const { data: products, error: productsError } = await supabase.from("products").select("id, name");
