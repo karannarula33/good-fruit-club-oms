@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import { parse } from "csv-parse/sync";
 import { deriveZoneFromAddress, type Zone } from "../src/lib/customers/zone";
 import { createServiceRoleClient } from "../src/lib/supabase/service-role";
+import { fetchAllRows } from "../src/lib/supabase/paginate";
 
 // Strictly-before this date is always imported unconditionally (§12.2.3).
 // Real app adoption didn't happen on a single clean day -- the team kept
@@ -340,12 +341,30 @@ async function main() {
     return;
   }
 
+  const CHUNK = 200;
+
   console.log("\nDeleting any existing is_historical rows (idempotent re-import)...");
-  const { data: existingHistorical } = await supabase.from("orders").select("id").eq("is_historical", true);
-  const existingHistoricalIds = (existingHistorical ?? []).map((o) => o.id);
+  // Paginated select (existingHistorical can exceed PostgREST's 1000-row
+  // page cap) and CHUNKed, error-checked deletes -- a single .in() with
+  // 500+ UUIDs blows the request URL length limit (same risk called out
+  // below for inserts), and the previous unchunked, unchecked version
+  // failed that silently: the delete request errored, the script logged
+  // "removed N" anyway (echoing the ids it *meant* to delete, not a
+  // confirmation), and the fresh insert landed on top of the untouched
+  // old rows -- every historical order ended up duplicated in the DB.
+  const existingHistoricalIds = (
+    await fetchAllRows<{ id: string }>((from, to) =>
+      supabase.from("orders").select("id").eq("is_historical", true).range(from, to),
+    )
+  ).map((o) => o.id);
+  for (let i = 0; i < existingHistoricalIds.length; i += CHUNK) {
+    const chunk = existingHistoricalIds.slice(i, i + CHUNK);
+    const { error: linesDeleteError } = await supabase.from("order_lines").delete().in("order_id", chunk);
+    if (linesDeleteError) throw new Error(`Failed deleting order_lines for historical chunk ${i}: ${linesDeleteError.message}`);
+    const { error: ordersDeleteError } = await supabase.from("orders").delete().in("id", chunk);
+    if (ordersDeleteError) throw new Error(`Failed deleting historical orders chunk ${i}: ${ordersDeleteError.message}`);
+  }
   if (existingHistoricalIds.length > 0) {
-    await supabase.from("order_lines").delete().in("order_id", existingHistoricalIds);
-    await supabase.from("orders").delete().in("id", existingHistoricalIds);
     console.log(`  removed ${existingHistoricalIds.length} previously-imported historical orders`);
   }
 
@@ -372,7 +391,6 @@ async function main() {
     created_by: null,
   }));
 
-  const CHUNK = 200;
   for (let i = 0; i < orderRows.length; i += CHUNK) {
     const { error } = await supabase.from("orders").insert(orderRows.slice(i, i + CHUNK));
     if (error) throw new Error(`Failed inserting orders chunk ${i}: ${error.message}`);
