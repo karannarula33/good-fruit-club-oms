@@ -5,8 +5,8 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { istWallClockToUtc } from "@/lib/time/ist";
 import { loadCatalogEntries } from "@/lib/catalog/load";
-import { loadPriceItemRecords } from "@/lib/pricing/load";
-import { resolvePriceForProduct } from "@/lib/pricing/resolve";
+import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
+import { resolveTieredPriceForProduct } from "@/lib/pricing/resolve";
 import { deriveDeliveryDate } from "@/lib/orders/delivery-date";
 import { deriveZoneFromAddress } from "@/lib/customers/zone";
 import {
@@ -51,10 +51,11 @@ export async function parseOrderBatchDraft(
 
   try {
     const supabase = await createClient();
-    const [catalog, customers, priceItems] = await Promise.all([
+    const [catalog, customers, priceItems, tierItems] = await Promise.all([
       loadCatalogEntries(supabase),
       loadCustomers(supabase),
       loadPriceItemRecords(supabase),
+      loadPriceTierRecords(supabase),
     ]);
 
     const batch = await parseOrderBatchPaste(rawText, catalog, customers);
@@ -64,7 +65,8 @@ export async function parseOrderBatchDraft(
       const lines: DraftLine[] = parsed.lines.map((line) => ({
         ...line,
         resolvedPrice: line.productId
-          ? (resolvePriceForProduct(priceItems, line.productId, placedAtUtc)?.pricePerUnit ?? null)
+          ? (resolveTieredPriceForProduct(priceItems, tierItems, line.productId, placedAtUtc, line.qty ?? 0)
+              ?.pricePerUnit ?? null)
           : null,
       }));
 
@@ -203,15 +205,20 @@ export async function saveOrder(
 
   // Price resolution always uses the ORDER's placed_at (confirmed with the
   // user) -- even lines added later via a merge lock to the price version
-  // active when the order was first created, not the merge moment.
-  const priceItems = await loadPriceItemRecords(supabase);
+  // active when the order was first created, not the merge moment. This is
+  // still only an estimate against the ordered qty: quantity-tiered pricing
+  // resolves the final rate at packing against the actual qty (see
+  // src/lib/packing/finalize.ts), overwriting this value.
+  const [priceItems, tierItems] = await Promise.all([loadPriceItemRecords(supabase), loadPriceTierRecords(supabase)]);
 
   const orderLineRows = input.lines.map((line) => ({
     order_id: orderId,
     product_id: line.productId,
     ordered_qty: line.orderedQty,
     ordered_unit: line.orderedUnit,
-    locked_price_per_unit: resolvePriceForProduct(priceItems, line.productId, orderPlacedAtUtc)?.pricePerUnit ?? null,
+    locked_price_per_unit:
+      resolveTieredPriceForProduct(priceItems, tierItems, line.productId, orderPlacedAtUtc, line.orderedQty)
+        ?.pricePerUnit ?? null,
     parse_confidence: line.confidence,
     parse_note: line.parseNote,
   }));

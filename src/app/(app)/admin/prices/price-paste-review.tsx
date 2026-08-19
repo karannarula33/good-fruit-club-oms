@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { parsePriceListDraft, publishPriceVersion, type ReviewLine } from "@/app/actions/prices";
+import { createProduct } from "@/app/actions/products";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +25,13 @@ interface Line extends ReviewLine {
   originalProductId: string | null;
   rememberAlias: boolean;
   aliasText: string;
+  addingProduct: boolean;
+  newProductName: string;
+  newProductUnitType: "weight" | "count";
+  newProductUnitLabel: string;
 }
+
+const NEW_PRODUCT_OPTION = "__new__";
 
 export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
   const router = useRouter();
@@ -33,12 +40,15 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
   const [step, setStep] = useState<Step>("paste");
   const [rawText, setRawText] = useState("");
   const [lines, setLines] = useState<Line[]>([]);
+  const [localCatalog, setLocalCatalog] = useState<CatalogProduct[]>(catalog);
   const [effectiveFromLocal, setEffectiveFromLocal] = useState(() => utcToIstDatetimeLocal(new Date()));
   const [note, setNote] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [addProductError, setAddProductError] = useState<Record<number, string>>({});
+  const [addProductPending, setAddProductPending] = useState<number | null>(null);
 
-  const productNameById = new Map(catalog.map((product) => [product.id, product.name]));
+  const productNameById = new Map(localCatalog.map((product) => [product.id, product.name]));
 
   async function handleParse(e: React.FormEvent) {
     e.preventDefault();
@@ -56,6 +66,10 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
         originalProductId: line.productId,
         rememberAlias: line.productId === null,
         aliasText: line.rawText,
+        addingProduct: false,
+        newProductName: line.rawText,
+        newProductUnitType: "weight",
+        newProductUnitLabel: "",
       })),
     );
     setStep("review");
@@ -63,6 +77,25 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
 
   function updateLine(index: number, patch: Partial<Line>) {
     setLines((prev) => prev.map((line, i) => (i === index ? { ...line, ...patch } : line)));
+  }
+
+  async function handleAddNewProduct(index: number) {
+    const line = lines[index];
+    setAddProductError((prev) => ({ ...prev, [index]: "" }));
+    setAddProductPending(index);
+    const result = await createProduct({
+      name: line.newProductName,
+      unitType: line.newProductUnitType,
+      unitLabel: line.newProductUnitLabel,
+    });
+    setAddProductPending(null);
+    if (!result.ok) {
+      setAddProductError((prev) => ({ ...prev, [index]: result.error }));
+      return;
+    }
+    setLocalCatalog((prev) => [...prev, { id: result.product.id, name: result.product.name, aliases: [] }]);
+    updateLine(index, { productId: result.product.id, addingProduct: false });
+    showToast(`${result.product.name} added ✓`);
   }
 
   const canPublish =
@@ -150,17 +183,74 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
                     {needsMapping ? (
                       <div className="space-y-1.5">
                         <div className="font-sans text-xs text-muted">&quot;{line.rawText}&quot;</div>
-                        <Select
-                          value={line.productId ?? ""}
-                          onChange={(e) => updateLine(index, { productId: e.target.value || null })}
-                        >
-                          <option value="">Select product…</option>
-                          {catalog.map((product) => (
-                            <option key={product.id} value={product.id}>
-                              {product.name}
-                            </option>
-                          ))}
-                        </Select>
+                        {!line.addingProduct && (
+                          <Select
+                            value={line.productId ?? ""}
+                            onChange={(e) => {
+                              if (e.target.value === NEW_PRODUCT_OPTION) {
+                                updateLine(index, { addingProduct: true, productId: null });
+                                return;
+                              }
+                              updateLine(index, { productId: e.target.value || null });
+                            }}
+                          >
+                            <option value="">Select product…</option>
+                            {localCatalog.map((product) => (
+                              <option key={product.id} value={product.id}>
+                                {product.name}
+                              </option>
+                            ))}
+                            <option value={NEW_PRODUCT_OPTION}>+ Add new product…</option>
+                          </Select>
+                        )}
+                        {line.addingProduct && (
+                          <div className="flex flex-col gap-1.5 rounded-xl bg-neutral-bg p-2.5">
+                            <Input
+                              type="text"
+                              value={line.newProductName}
+                              onChange={(e) => updateLine(index, { newProductName: e.target.value })}
+                              placeholder="Product name"
+                            />
+                            <div className="flex gap-1.5">
+                              <Select
+                                className="flex-1"
+                                value={line.newProductUnitType}
+                                onChange={(e) =>
+                                  updateLine(index, { newProductUnitType: e.target.value as "weight" | "count" })
+                                }
+                              >
+                                <option value="weight">Weight</option>
+                                <option value="count">Count</option>
+                              </Select>
+                              <Input
+                                className="flex-1"
+                                type="text"
+                                value={line.newProductUnitLabel}
+                                onChange={(e) => updateLine(index, { newProductUnitLabel: e.target.value })}
+                                placeholder="kg, dozen…"
+                              />
+                            </div>
+                            {addProductError[index] && <FormError>{addProductError[index]}</FormError>}
+                            <div className="flex gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="dark"
+                                pending={addProductPending === index}
+                                pendingText="Adding…"
+                                onClick={() => handleAddNewProduct(index)}
+                              >
+                                Create product
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => updateLine(index, { addingProduct: false })}
+                              >
+                                Cancel
+                              </Button>
+                            </div>
+                          </div>
+                        )}
                         {line.productId && (
                           <label className="flex items-center gap-1 font-sans text-xs font-semibold text-muted">
                             <input

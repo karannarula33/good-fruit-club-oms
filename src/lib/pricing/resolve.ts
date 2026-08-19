@@ -5,6 +5,7 @@
 // price-locking (Slice 4), where `asOf` is the order's placed_at.
 
 export interface PriceItemRecord {
+  priceItemId: string;
   productId: string;
   pricePerUnit: number;
   effectiveFrom: Date;
@@ -12,9 +13,16 @@ export interface PriceItemRecord {
 }
 
 export interface ResolvedPrice {
+  priceItemId: string;
   productId: string;
   pricePerUnit: number;
   effectiveFrom: Date;
+}
+
+export interface TierRecord {
+  priceItemId: string;
+  minQty: number;
+  pricePerUnit: number;
 }
 
 export function resolvePrices(
@@ -45,6 +53,7 @@ export function resolvePrices(
   const resolved = new Map<string, ResolvedPrice>();
   for (const [productId, item] of best) {
     resolved.set(productId, {
+      priceItemId: item.priceItemId,
       productId,
       pricePerUnit: item.pricePerUnit,
       effectiveFrom: item.effectiveFrom,
@@ -63,4 +72,38 @@ export function resolvePriceForProduct(
     asOf,
   );
   return resolved.get(productId) ?? null;
+}
+
+// Picks the highest minQty threshold the given qty meets, falling back to
+// the base rate when qty is below every tier (or there are none). Tiers
+// belonging to a different price_items row than the resolved base price
+// are the caller's responsibility to exclude -- see
+// resolveTieredPriceForProduct, which does that filtering.
+export function applyTier(basePricePerUnit: number, tiers: TierRecord[], qty: number): number {
+  let best = basePricePerUnit;
+  let bestMinQty = 0;
+  for (const tier of tiers) {
+    if (qty >= tier.minQty && tier.minQty > bestMinQty) {
+      best = tier.pricePerUnit;
+      bestMinQty = tier.minQty;
+    }
+  }
+  return best;
+}
+
+export function resolveTieredPriceForProduct(
+  items: PriceItemRecord[],
+  tiers: TierRecord[],
+  productId: string,
+  asOf: Date,
+  qty: number,
+): ResolvedPrice | null {
+  const base = resolvePriceForProduct(items, productId, asOf);
+  if (!base) return null;
+
+  const matchingTiers = tiers.filter((tier) => tier.priceItemId === base.priceItemId);
+  return {
+    ...base,
+    pricePerUnit: applyTier(base.pricePerUnit, matchingTiers, qty),
+  };
 }

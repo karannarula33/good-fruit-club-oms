@@ -39,5 +39,48 @@ export async function createProduct(
   }
 
   revalidatePath("/admin/orders");
+  revalidatePath("/admin/prices");
+  revalidatePath("/admin/catalog");
   return { ok: true, product: { id: data.id, name: data.name } };
+}
+
+export interface UpdateProductInput {
+  id: string;
+  name: string;
+  unitType: "weight" | "count";
+  unitLabel: string;
+  active: boolean;
+}
+
+export async function updateProduct(
+  input: UpdateProductInput,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireRole(["admin"]);
+
+  const name = input.name.trim();
+  const unitLabel = input.unitLabel.trim();
+  if (!name) {
+    return { ok: false, error: "Product name is required." };
+  }
+  if (!unitLabel) {
+    return { ok: false, error: "Unit label is required." };
+  }
+  if (input.unitType !== "weight" && input.unitType !== "count") {
+    return { ok: false, error: "Unit type must be weight or count." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("products")
+    .update({ name, unit_type: input.unitType, unit_label: unitLabel, active: input.active })
+    .eq("id", input.id);
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin/prices");
+  revalidatePath("/admin/catalog");
+  return { ok: true };
 }

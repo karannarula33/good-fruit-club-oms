@@ -1,21 +1,36 @@
 import { describe, expect, it } from "vitest";
-import { resolvePrices, resolvePriceForProduct, type PriceItemRecord } from "@/lib/pricing/resolve";
+import {
+  resolvePrices,
+  resolvePriceForProduct,
+  applyTier,
+  resolveTieredPriceForProduct,
+  type PriceItemRecord,
+  type TierRecord,
+} from "@/lib/pricing/resolve";
 
 const MANGO = "product-mango";
 const BANANA = "product-banana";
+
+let nextPriceItemId = 0;
 
 function item(
   productId: string,
   pricePerUnit: number,
   effectiveFrom: string,
   versionCreatedAt = effectiveFrom,
+  priceItemId = `price-item-${++nextPriceItemId}`,
 ): PriceItemRecord {
   return {
+    priceItemId,
     productId,
     pricePerUnit,
     effectiveFrom: new Date(effectiveFrom),
     versionCreatedAt: new Date(versionCreatedAt),
   };
+}
+
+function tier(priceItemId: string, minQty: number, pricePerUnit: number): TierRecord {
+  return { priceItemId, minQty, pricePerUnit };
 }
 
 describe("resolvePrices", () => {
@@ -85,6 +100,55 @@ describe("resolvePrices", () => {
   it("never defaults an unresolved product to zero", () => {
     const items = [item(MANGO, 295, "2099-01-01T00:00:00Z")];
     const resolved = resolvePriceForProduct(items, MANGO, new Date("2026-07-27T00:00:00Z"));
+    expect(resolved).toBeNull();
+  });
+});
+
+describe("applyTier", () => {
+  it("returns the base rate when there are no tiers", () => {
+    expect(applyTier(990, [], 7)).toBe(990);
+  });
+
+  it("returns the base rate when qty is below every tier threshold", () => {
+    const tiers = [tier("pi-1", 5, 900)];
+    expect(applyTier(990, tiers, 3)).toBe(990);
+  });
+
+  it("picks the highest threshold the qty meets", () => {
+    const tiers = [tier("pi-1", 5, 900), tier("pi-1", 10, 850)];
+    expect(applyTier(990, tiers, 7)).toBe(900);
+    expect(applyTier(990, tiers, 10)).toBe(850);
+    expect(applyTier(990, tiers, 20)).toBe(850);
+  });
+
+  it("treats the threshold boundary as inclusive", () => {
+    const tiers = [tier("pi-1", 5, 900)];
+    expect(applyTier(990, tiers, 5)).toBe(900);
+  });
+});
+
+describe("resolveTieredPriceForProduct", () => {
+  it("applies the tier belonging to the resolved price_items row", () => {
+    const mangoItem = item(MANGO, 990, "2026-07-27T00:00:00Z", "2026-07-27T00:00:00Z", "pi-mango");
+    const items = [mangoItem];
+    const tiers = [tier("pi-mango", 5, 900)];
+    const resolved = resolveTieredPriceForProduct(items, tiers, MANGO, new Date("2026-07-27T12:00:00Z"), 7);
+    expect(resolved?.pricePerUnit).toBe(900);
+  });
+
+  it("ignores tiers attached to a superseded price_items row", () => {
+    const oldItem = item(MANGO, 950, "2026-07-01T00:00:00Z", "2026-07-01T00:00:00Z", "pi-old");
+    const newItem = item(MANGO, 990, "2026-07-27T00:00:00Z", "2026-07-27T00:00:00Z", "pi-new");
+    const items = [oldItem, newItem];
+    // A bulk tier that only ever existed on the old (superseded) row must
+    // not leak into resolution against the new one.
+    const tiers = [tier("pi-old", 5, 800)];
+    const resolved = resolveTieredPriceForProduct(items, tiers, MANGO, new Date("2026-07-27T12:00:00Z"), 7);
+    expect(resolved?.pricePerUnit).toBe(990);
+  });
+
+  it("never defaults to zero when the product has no resolvable base price", () => {
+    const resolved = resolveTieredPriceForProduct([], [], MANGO, new Date(), 7);
     expect(resolved).toBeNull();
   });
 });

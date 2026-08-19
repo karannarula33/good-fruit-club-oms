@@ -2,7 +2,7 @@
 
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { loadPriceItemRecords } from "@/lib/pricing/load";
+import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
 import {
   buildFinalizeOrderPlan,
   type PackingLineResolution,
@@ -20,7 +20,7 @@ export async function finalizeOrder(
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("status, status_timestamps")
+    .select("status, status_timestamps, placed_at")
     .eq("id", orderId)
     .single();
   if (orderError || !order) {
@@ -32,7 +32,7 @@ export async function finalizeOrder(
 
   const { data: existingLines, error: linesError } = await supabase
     .from("order_lines")
-    .select("id")
+    .select("id, product_id")
     .eq("order_id", orderId);
   if (linesError) {
     return { ok: false, error: linesError.message };
@@ -49,9 +49,21 @@ export async function finalizeOrder(
     }
   }
 
-  const priceItems = await loadPriceItemRecords(supabase);
+  const productIdByLineId = new Map(
+    (existingLines ?? []).filter((line) => line.product_id).map((line) => [line.id, line.product_id as string]),
+  );
+
+  const [priceItems, tierItems] = await Promise.all([loadPriceItemRecords(supabase), loadPriceTierRecords(supabase)]);
   const now = new Date();
-  const plan = buildFinalizeOrderPlan({ resolutions, substitutions, priceItems, now });
+  const plan = buildFinalizeOrderPlan({
+    resolutions,
+    substitutions,
+    priceItems,
+    tierItems,
+    productIdByLineId,
+    placedAt: new Date(order.placed_at),
+    now,
+  });
 
   // Each line is an independent row -- run the writes in parallel rather
   // than one sequential round trip per line.
@@ -59,7 +71,11 @@ export async function finalizeOrder(
     plan.lineUpdates.map((update) =>
       supabase
         .from("order_lines")
-        .update({ line_status: update.lineStatus, actual_qty: update.actualQty })
+        .update({
+          line_status: update.lineStatus,
+          actual_qty: update.actualQty,
+          locked_price_per_unit: update.lockedPricePerUnit,
+        })
         .eq("id", update.lineId),
     ),
   );

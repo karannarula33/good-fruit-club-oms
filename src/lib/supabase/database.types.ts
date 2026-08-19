@@ -150,6 +150,27 @@ export interface Database {
         };
         Relationships: [];
       };
+      price_tiers: {
+        Row: {
+          id: string;
+          price_item_id: string;
+          min_qty: number;
+          price_per_unit: number;
+        };
+        Insert: {
+          id?: string;
+          price_item_id: string;
+          min_qty: number;
+          price_per_unit: number;
+        };
+        Update: {
+          id?: string;
+          price_item_id?: string;
+          min_qty?: number;
+          price_per_unit?: number;
+        };
+        Relationships: [];
+      };
       customers: {
         Row: {
           id: string;
@@ -652,7 +673,12 @@ export interface Database {
         Args: {
           p_effective_from: string;
           p_note: string | null;
-          p_items: { product_id: string; price_per_unit: number }[];
+          p_items: {
+            product_id: string;
+            price_per_unit: number;
+            tiers?: { min_qty: number; price_per_unit: number }[];
+            replace_tiers?: boolean;
+          }[];
           p_new_aliases: { product_id: string; alias: string }[];
         };
         Returns: string;

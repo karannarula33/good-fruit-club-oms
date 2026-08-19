@@ -2,8 +2,8 @@
 
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { loadPriceItemRecords } from "@/lib/pricing/load";
-import { resolvePriceForProduct } from "@/lib/pricing/resolve";
+import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
+import { resolveTieredPriceForProduct } from "@/lib/pricing/resolve";
 import { computeBillTotal, computeCustomerBalance, computeNetDue } from "@/lib/billing/compute";
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
 import { planAdvanceAllocation, type AdvanceCredit } from "@/lib/billing/allocate";
@@ -68,11 +68,12 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
   // A line that *did* lock a real price is never touched, matching the
   // "never recomputed" rule for prices that already locked successfully.
   const now = new Date();
-  const priceItems = await loadPriceItemRecords(supabase);
+  const [priceItems, tierItems] = await Promise.all([loadPriceItemRecords(supabase), loadPriceTierRecords(supabase)]);
   const newlyResolvedByLineId = new Map<string, number>();
   for (const line of lineRows ?? []) {
     if (line.locked_price_per_unit !== null || !line.product_id) continue;
-    const resolved = resolvePriceForProduct(priceItems, line.product_id, now);
+    const actualQty = (line.actual_qty as number | null) ?? 0;
+    const resolved = resolveTieredPriceForProduct(priceItems, tierItems, line.product_id, now, actualQty);
     if (resolved) {
       newlyResolvedByLineId.set(line.id, resolved.pricePerUnit);
     }
