@@ -3,7 +3,7 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
-import { resolveTieredPriceForProduct } from "@/lib/pricing/resolve";
+import { resolveBillLinePrices } from "@/lib/billing/resolve-line-prices";
 import { computeBillTotal, computeCustomerBalance, computeNetDue } from "@/lib/billing/compute";
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
 import { planAdvanceAllocation, type AdvanceCredit } from "@/lib/billing/allocate";
@@ -59,29 +59,44 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
     return { ok: false, reason: "error", error: linesError.message };
   }
 
-  // A line whose locked_price_per_unit is null was never truly "locked" --
-  // per CLAUDE.md §3.2 it was flagged and blocked from billing, not priced
-  // at zero. It gets one more chance to resolve right now, against
-  // whatever's active at billing time (same "record time" pricing already
-  // used for packing substitutions in Slice 6) -- this is what lets a
-  // pricing gap fixed in /admin/prices actually unblock a Retry here.
-  // A line that *did* lock a real price is never touched, matching the
-  // "never recomputed" rule for prices that already locked successfully.
+  // Packing is deliberately price-blind (src/lib/packing/finalize.ts), so
+  // every line's price gets resolved right here, against whatever's active
+  // at billing time using the actual packed qty -- this is what makes "the
+  // latest configured price" always reflect at the billing step, per
+  // CLAUDE.md §3.2's guard plus the admin's explicit override escape hatch.
+  // A line the admin has already overridden (audited in price_overrides)
+  // is left exactly as they set it and never silently re-resolved.
+  const lineIds = (lineRows ?? []).map((line) => line.id);
+  const [priceItems, tierItems, { data: overrideRows }] = await Promise.all([
+    loadPriceItemRecords(supabase),
+    loadPriceTierRecords(supabase),
+    lineIds.length
+      ? supabase.from("price_overrides").select("order_line_id").in("order_line_id", lineIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+  const overriddenLineIds = new Set((overrideRows ?? []).map((r) => r.order_line_id));
   const now = new Date();
-  const [priceItems, tierItems] = await Promise.all([loadPriceItemRecords(supabase), loadPriceTierRecords(supabase)]);
-  const newlyResolvedByLineId = new Map<string, number>();
-  for (const line of lineRows ?? []) {
-    if (line.locked_price_per_unit !== null || !line.product_id) continue;
-    const actualQty = (line.actual_qty as number | null) ?? 0;
-    const resolved = resolveTieredPriceForProduct(priceItems, tierItems, line.product_id, now, actualQty);
-    if (resolved) {
-      newlyResolvedByLineId.set(line.id, resolved.pricePerUnit);
-    }
-  }
-  if (newlyResolvedByLineId.size > 0) {
+  const resolvedPriceByLineId = resolveBillLinePrices(
+    (lineRows ?? []).map((line) => ({
+      id: line.id,
+      productId: line.product_id,
+      actualQty: line.actual_qty as number | null,
+      lockedPricePerUnit: line.locked_price_per_unit,
+    })),
+    overriddenLineIds,
+    priceItems,
+    tierItems,
+    now,
+  );
+
+  const toPersist = (lineRows ?? []).filter((line) => !overriddenLineIds.has(line.id));
+  if (toPersist.length > 0) {
     const results = await Promise.all(
-      [...newlyResolvedByLineId].map(([lineId, pricePerUnit]) =>
-        supabase.from("order_lines").update({ locked_price_per_unit: pricePerUnit }).eq("id", lineId),
+      toPersist.map((line) =>
+        supabase
+          .from("order_lines")
+          .update({ locked_price_per_unit: resolvedPriceByLineId.get(line.id) ?? null })
+          .eq("id", line.id),
       ),
     );
     const firstError = results.find((r) => r.error);
@@ -90,8 +105,7 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
     }
   }
 
-  const effectivePriceForLine = (line: { id: string; locked_price_per_unit: number | null }) =>
-    line.locked_price_per_unit ?? newlyResolvedByLineId.get(line.id) ?? null;
+  const effectivePriceForLine = (line: { id: string }) => resolvedPriceByLineId.get(line.id) ?? null;
 
   const billableLines = (lineRows ?? []).map((line) => ({
     actualQty: line.actual_qty as number,

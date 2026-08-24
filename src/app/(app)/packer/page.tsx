@@ -1,6 +1,8 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
+import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
+import { resolveBillLinePrices } from "@/lib/billing/resolve-line-prices";
 import { DateNav } from "@/components/ui/date-nav";
 import { PackingScreen, type PackingOrder } from "./packing-screen";
 import type { PackagingType } from "@/lib/supabase/database.types";
@@ -52,6 +54,36 @@ export default async function PackerPage({
   const productById = new Map((products ?? []).map((p) => [p.id, p]));
   const billedIds = new Set((billedRows ?? []).map((b) => b.order_id));
 
+  // Packing never resolves a price (packers must have zero price access --
+  // price_items/price_versions/price_tiers stay RLS admin-only). For an
+  // admin viewing a packed order before Generate Bill, compute the same
+  // "latest configured price" preview generateBill will persist -- display
+  // only, nothing written here. A packer session never fetches price data.
+  const isAdmin = profile.role === "admin";
+  const packedLines = (orderLines ?? []).filter((l) => l.line_status === "packed");
+  let resolvedPriceByLineId = new Map<string, number | null>();
+  if (isAdmin && packedLines.length > 0) {
+    const packedLineIds = packedLines.map((l) => l.id);
+    const [priceItems, tierItems, { data: overrideRows }] = await Promise.all([
+      loadPriceItemRecords(supabase),
+      loadPriceTierRecords(supabase),
+      supabase.from("price_overrides").select("order_line_id").in("order_line_id", packedLineIds),
+    ]);
+    const overriddenLineIds = new Set((overrideRows ?? []).map((r) => r.order_line_id));
+    resolvedPriceByLineId = resolveBillLinePrices(
+      packedLines.map((l) => ({
+        id: l.id,
+        productId: l.product_id,
+        actualQty: l.actual_qty,
+        lockedPricePerUnit: l.locked_price_per_unit,
+      })),
+      overriddenLineIds,
+      priceItems,
+      tierItems,
+      new Date(),
+    );
+  }
+
   const packagesByOrderId = new Map<string, { id: string; packagingType: PackagingType }[]>();
   for (const pkg of packageRows ?? []) {
     const list = packagesByOrderId.get(pkg.order_id) ?? [];
@@ -93,7 +125,9 @@ export default async function PackerPage({
             orderedQty: line.ordered_qty,
             orderedUnit: line.ordered_unit,
             actualQty: line.actual_qty,
-            lockedPricePerUnit: line.locked_price_per_unit,
+            lockedPricePerUnit: resolvedPriceByLineId.has(line.id)
+              ? resolvedPriceByLineId.get(line.id)!
+              : line.locked_price_per_unit,
             lineStatus: line.line_status,
             packageId: line.package_id,
           };

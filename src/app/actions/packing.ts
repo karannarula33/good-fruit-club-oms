@@ -2,7 +2,6 @@
 
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
-import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
 import {
   buildFinalizeOrderPlan,
   type PackingLineResolution,
@@ -44,7 +43,7 @@ export async function finalizeOrder(
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("status, status_timestamps, placed_at")
+    .select("status, status_timestamps")
     .eq("id", orderId)
     .single();
   if (orderError || !order) {
@@ -56,7 +55,7 @@ export async function finalizeOrder(
 
   const { data: existingLines, error: linesError } = await supabase
     .from("order_lines")
-    .select("id, product_id")
+    .select("id")
     .eq("order_id", orderId);
   if (linesError) {
     return { ok: false, error: linesError.message };
@@ -73,21 +72,8 @@ export async function finalizeOrder(
     }
   }
 
-  const productIdByLineId = new Map(
-    (existingLines ?? []).filter((line) => line.product_id).map((line) => [line.id, line.product_id as string]),
-  );
-
-  const [priceItems, tierItems] = await Promise.all([loadPriceItemRecords(supabase), loadPriceTierRecords(supabase)]);
   const now = new Date();
-  const plan = buildFinalizeOrderPlan({
-    resolutions,
-    substitutions,
-    priceItems,
-    tierItems,
-    productIdByLineId,
-    placedAt: new Date(order.placed_at),
-    now,
-  });
+  const plan = buildFinalizeOrderPlan({ resolutions, substitutions });
 
   // New boxes/packets the packer created during this session (a line picked
   // "New: Big Box" etc.) need real rows before we can point order_lines at
@@ -116,7 +102,6 @@ export async function finalizeOrder(
         .update({
           line_status: update.lineStatus,
           actual_qty: update.actualQty,
-          locked_price_per_unit: update.lockedPricePerUnit,
           package_id: packageIdByLineId.get(update.lineId) ?? null,
         })
         .eq("id", update.lineId),
@@ -133,7 +118,6 @@ export async function finalizeOrder(
         order_id: orderId,
         product_id: line.productId,
         actual_qty: line.actualQty,
-        locked_price_per_unit: line.lockedPricePerUnit,
         line_status: "packed" as const,
         is_substitution: true,
         substituted_for_line_id: line.substitutedForLineId,

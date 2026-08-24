@@ -1,27 +1,23 @@
 // CLAUDE.md §3.3/§3.4: per line, packing resolves to exactly one of
 // "packed" (actual qty entered) or "unavailable" (drops from billing).
-// A substitution is an optional enhancement on top of "unavailable" --
-// it has no price lock from order entry, so it prices at the version
-// active at substitution time (now, at packing), never at the order's
-// original placed_at. Pure function so the server action stays thin and
-// this is independently testable.
+// A substitution is an optional enhancement on top of "unavailable".
+// Pure function so the server action stays thin and this is independently
+// testable.
 //
-// Quantity-tiered pricing (deliberate, scoped exception to §3.1's "locked
-// at creation, never recomputed"): a regular packed line's final rate is
-// resolved here, at packing, against the ordered-quantity tier schedule
-// using the *actual* qty just recorded -- the price *version* still pins
-// to the order's original placedAt (§3.2), only which tier within that
-// version is deferred until the real billable quantity is known.
-
-import { resolveTieredPriceForProduct, type PriceItemRecord, type TierRecord } from "@/lib/pricing/resolve";
+// Packing is deliberately price-blind: packers must not need any read
+// access to price_items/price_versions/price_tiers (those stay RLS
+// admin-only), so this plan never resolves a price. Pricing -- including
+// quantity-tiered pricing against the actual packed qty -- is resolved
+// entirely at the billing step (see src/lib/billing/resolve-line-prices.ts),
+// which always reflects the latest configured price and runs admin-only.
 
 export interface PackingLineResolution {
   lineId: string;
   resolution: "packed" | "unavailable";
   actualQty: number | null;
   // Which box/packet this line went into -- "" or existing order_packages
-  // uuid or a client tempId for a not-yet-saved package. Not used by pricing
-  // logic here; resolved to a real package_id by the finalizeOrder action.
+  // uuid or a client tempId for a not-yet-saved package. Resolved to a real
+  // package_id by the finalizeOrder action.
   packageRef?: string | null;
 }
 
@@ -36,13 +32,11 @@ export interface LineUpdate {
   lineId: string;
   lineStatus: "packed" | "unavailable";
   actualQty: number | null;
-  lockedPricePerUnit: number | null;
 }
 
 export interface NewSubstitutionLine {
   productId: string;
   actualQty: number;
-  lockedPricePerUnit: number | null;
   substitutedForLineId: string;
 }
 
@@ -59,44 +53,16 @@ export interface FinalizeOrderPlan {
 export function buildFinalizeOrderPlan(params: {
   resolutions: PackingLineResolution[];
   substitutions: SubstitutionInput[];
-  priceItems: PriceItemRecord[];
-  tierItems: TierRecord[];
-  productIdByLineId: Map<string, string>;
-  placedAt: Date;
-  now: Date;
 }): FinalizeOrderPlan {
-  const lineUpdates: LineUpdate[] = params.resolutions.map((resolution) => {
-    const actualQty = resolution.resolution === "packed" ? resolution.actualQty : null;
-    const productId = params.productIdByLineId.get(resolution.lineId);
-    const lockedPricePerUnit =
-      resolution.resolution === "packed" && productId && actualQty !== null
-        ? (resolveTieredPriceForProduct(
-            params.priceItems,
-            params.tierItems,
-            productId,
-            params.placedAt,
-            actualQty,
-          )?.pricePerUnit ?? null)
-        : null;
-    return {
-      lineId: resolution.lineId,
-      lineStatus: resolution.resolution,
-      actualQty,
-      lockedPricePerUnit,
-    };
-  });
+  const lineUpdates: LineUpdate[] = params.resolutions.map((resolution) => ({
+    lineId: resolution.lineId,
+    lineStatus: resolution.resolution,
+    actualQty: resolution.resolution === "packed" ? resolution.actualQty : null,
+  }));
 
   const newSubstitutionLines: NewSubstitutionLine[] = params.substitutions.map((substitution) => ({
     productId: substitution.productId,
     actualQty: substitution.actualQty,
-    lockedPricePerUnit:
-      resolveTieredPriceForProduct(
-        params.priceItems,
-        params.tierItems,
-        substitution.productId,
-        params.now,
-        substitution.actualQty,
-      )?.pricePerUnit ?? null,
     substitutedForLineId: substitution.substitutedForLineId,
   }));
 
