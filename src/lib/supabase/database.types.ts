@@ -23,6 +23,7 @@ export type OrderStatus =
   | "delivered"
   | "cancelled";
 export type LineStatus = "pending" | "packed" | "unavailable";
+export type PackagingType = "big_box" | "medium_box" | "small_box" | "small_packet" | "big_packet" | "tiny_box";
 export type ParseConfidence = "clean" | "flagged";
 export type LedgerEntryType = "debit" | "credit";
 export type LedgerMode = "cash" | "upi" | "other";
@@ -258,6 +259,7 @@ export interface Database {
           substituted_for_line_id: string | null;
           parse_confidence: ParseConfidence | null;
           parse_note: string | null;
+          package_id: string | null;
         };
         Insert: {
           id?: string;
@@ -273,6 +275,7 @@ export interface Database {
           substituted_for_line_id?: string | null;
           parse_confidence?: ParseConfidence | null;
           parse_note?: string | null;
+          package_id?: string | null;
         };
         Update: {
           id?: string;
@@ -288,6 +291,28 @@ export interface Database {
           substituted_for_line_id?: string | null;
           parse_confidence?: ParseConfidence | null;
           parse_note?: string | null;
+          package_id?: string | null;
+        };
+        Relationships: [];
+      };
+      order_packages: {
+        Row: {
+          id: string;
+          order_id: string;
+          packaging_type: PackagingType;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          order_id: string;
+          packaging_type: PackagingType;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          order_id?: string;
+          packaging_type?: PackagingType;
+          created_at?: string;
         };
         Relationships: [];
       };

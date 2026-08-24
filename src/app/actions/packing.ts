@@ -8,13 +8,37 @@ import {
   type PackingLineResolution,
   type SubstitutionInput,
 } from "@/lib/packing/finalize";
+import { PACKAGING_TYPES } from "@/lib/packing/packaging";
+import type { PackagingType } from "@/lib/supabase/database.types";
+
+export interface NewPackageInput {
+  tempId: string;
+  packagingType: PackagingType;
+}
+
+const VALID_PACKAGING_TYPES = new Set(PACKAGING_TYPES.map((t) => t.value));
+
+// Resolves a per-line `packageRef` -- "" (unset), an existing order_packages
+// uuid, or a client-side tempId minted for a not-yet-saved box -- to the
+// real package_id that should be written to order_lines.
+function resolvePackageId(packageRef: string | null | undefined, tempIdToRealId: Map<string, string>): string | null {
+  if (!packageRef) return null;
+  return tempIdToRealId.get(packageRef) ?? packageRef;
+}
 
 export async function finalizeOrder(
   orderId: string,
   resolutions: PackingLineResolution[],
   substitutions: SubstitutionInput[],
+  newPackages: NewPackageInput[] = [],
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireRole(["packer", "admin"]);
+
+  for (const pkg of newPackages) {
+    if (!VALID_PACKAGING_TYPES.has(pkg.packagingType)) {
+      return { ok: false, error: `Unknown packaging type: ${pkg.packagingType}.` };
+    }
+  }
 
   const supabase = await createClient();
 
@@ -65,6 +89,24 @@ export async function finalizeOrder(
     now,
   });
 
+  // New boxes/packets the packer created during this session (a line picked
+  // "New: Big Box" etc.) need real rows before we can point order_lines at
+  // them -- insert first and map each client tempId to its real uuid.
+  const tempIdToRealId = new Map<string, string>();
+  if (newPackages.length > 0) {
+    const { data: insertedPackages, error: packagesError } = await supabase
+      .from("order_packages")
+      .insert(newPackages.map((pkg) => ({ order_id: orderId, packaging_type: pkg.packagingType })))
+      .select("id");
+    if (packagesError || !insertedPackages) {
+      return { ok: false, error: packagesError?.message ?? "Failed to create packaging." };
+    }
+    newPackages.forEach((pkg, i) => tempIdToRealId.set(pkg.tempId, insertedPackages[i].id));
+  }
+  const packageIdByLineId = new Map(
+    resolutions.map((r) => [r.lineId, resolvePackageId(r.packageRef, tempIdToRealId)]),
+  );
+
   // Each line is an independent row -- run the writes in parallel rather
   // than one sequential round trip per line.
   const lineUpdateResults = await Promise.all(
@@ -75,6 +117,7 @@ export async function finalizeOrder(
           line_status: update.lineStatus,
           actual_qty: update.actualQty,
           locked_price_per_unit: update.lockedPricePerUnit,
+          package_id: packageIdByLineId.get(update.lineId) ?? null,
         })
         .eq("id", update.lineId),
     ),
@@ -86,7 +129,7 @@ export async function finalizeOrder(
 
   if (plan.newSubstitutionLines.length > 0) {
     const { error } = await supabase.from("order_lines").insert(
-      plan.newSubstitutionLines.map((line) => ({
+      plan.newSubstitutionLines.map((line, i) => ({
         order_id: orderId,
         product_id: line.productId,
         actual_qty: line.actualQty,
@@ -94,6 +137,7 @@ export async function finalizeOrder(
         line_status: "packed" as const,
         is_substitution: true,
         substituted_for_line_id: line.substitutedForLineId,
+        package_id: resolvePackageId(substitutions[i]?.packageRef, tempIdToRealId),
       })),
     );
     if (error) {

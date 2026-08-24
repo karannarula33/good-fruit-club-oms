@@ -19,12 +19,17 @@ export interface PackingLineResolution {
   lineId: string;
   resolution: "packed" | "unavailable";
   actualQty: number | null;
+  // Which box/packet this line went into -- "" or existing order_packages
+  // uuid or a client tempId for a not-yet-saved package. Not used by pricing
+  // logic here; resolved to a real package_id by the finalizeOrder action.
+  packageRef?: string | null;
 }
 
 export interface SubstitutionInput {
   substitutedForLineId: string;
   productId: string;
   actualQty: number;
+  packageRef?: string | null;
 }
 
 export interface LineUpdate {

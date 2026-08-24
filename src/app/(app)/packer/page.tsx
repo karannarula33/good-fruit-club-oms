@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { DateNav } from "@/components/ui/date-nav";
 import { PackingScreen, type PackingOrder } from "./packing-screen";
+import type { PackagingType } from "@/lib/supabase/database.types";
 
 export default async function PackerPage({
   searchParams,
@@ -25,25 +26,38 @@ export default async function PackerPage({
   const orderIds = (orders ?? []).map((o) => o.id);
   const customerIds = [...new Set((orders ?? []).map((o) => o.customer_id))];
 
-  const [{ data: customers }, { data: orderLines }, { data: products }, { data: billedRows }] = await Promise.all([
-    customerIds.length
-      ? supabase.from("customers").select("id, display_name, phone, zone").in("id", customerIds)
-      : Promise.resolve({ data: [] }),
-    orderIds.length
-      ? supabase
-          .from("order_lines")
-          .select("id, order_id, product_id, ordered_qty, ordered_unit, actual_qty, locked_price_per_unit, line_status")
-          .in("order_id", orderIds)
-      : Promise.resolve({ data: [] }),
-    supabase.from("products").select("id, name, unit_type, unit_label").eq("active", true).order("name"),
-    orderIds.length
-      ? supabase.from("bills").select("order_id").in("order_id", orderIds)
-      : Promise.resolve({ data: [] }),
-  ]);
+  const [{ data: customers }, { data: orderLines }, { data: products }, { data: billedRows }, { data: packageRows }] =
+    await Promise.all([
+      customerIds.length
+        ? supabase.from("customers").select("id, display_name, phone, zone").in("id", customerIds)
+        : Promise.resolve({ data: [] }),
+      orderIds.length
+        ? supabase
+            .from("order_lines")
+            .select(
+              "id, order_id, product_id, ordered_qty, ordered_unit, actual_qty, locked_price_per_unit, line_status, package_id",
+            )
+            .in("order_id", orderIds)
+        : Promise.resolve({ data: [] }),
+      supabase.from("products").select("id, name, unit_type, unit_label").eq("active", true).order("name"),
+      orderIds.length
+        ? supabase.from("bills").select("order_id").in("order_id", orderIds)
+        : Promise.resolve({ data: [] }),
+      orderIds.length
+        ? supabase.from("order_packages").select("id, order_id, packaging_type").in("order_id", orderIds)
+        : Promise.resolve({ data: [] }),
+    ]);
 
   const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
   const productById = new Map((products ?? []).map((p) => [p.id, p]));
   const billedIds = new Set((billedRows ?? []).map((b) => b.order_id));
+
+  const packagesByOrderId = new Map<string, { id: string; packagingType: PackagingType }[]>();
+  for (const pkg of packageRows ?? []) {
+    const list = packagesByOrderId.get(pkg.order_id) ?? [];
+    list.push({ id: pkg.id, packagingType: pkg.packaging_type });
+    packagesByOrderId.set(pkg.order_id, list);
+  }
 
   type OrderLineRow = {
     id: string;
@@ -54,6 +68,7 @@ export default async function PackerPage({
     actual_qty: number | null;
     locked_price_per_unit: number | null;
     line_status: "pending" | "packed" | "unavailable";
+    package_id: string | null;
   };
   const linesByOrderId = new Map<string, OrderLineRow[]>();
   for (const line of (orderLines ?? []) as OrderLineRow[]) {
@@ -80,6 +95,7 @@ export default async function PackerPage({
             actualQty: line.actual_qty,
             lockedPricePerUnit: line.locked_price_per_unit,
             lineStatus: line.line_status,
+            packageId: line.package_id,
           };
         })
         .filter((line): line is NonNullable<typeof line> => line !== null);
@@ -91,6 +107,7 @@ export default async function PackerPage({
         customerPhone: customer?.phone ?? null,
         zone: customer?.zone ?? "",
         lines,
+        packages: packagesByOrderId.get(order.id) ?? [],
       };
     })
     .filter((order) => order.lines.length > 0);

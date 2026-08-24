@@ -17,6 +17,7 @@ interface Stop {
   zone: string;
   billTotal: number | null;
   netDue: number | null;
+  packagingSummary: string | null;
 }
 
 export function DeliveryStopsBoard({

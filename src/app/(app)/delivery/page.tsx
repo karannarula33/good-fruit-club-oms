@@ -5,7 +5,8 @@ import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { PageHeader } from "@/components/ui/page-header";
 import { DateNav } from "@/components/ui/date-nav";
 import { DeliveryStopsBoard } from "./delivery-stops-board";
-import type { OrderStatus } from "@/lib/supabase/database.types";
+import { summarizePackaging } from "@/lib/packing/packaging";
+import type { OrderStatus, PackagingType } from "@/lib/supabase/database.types";
 
 export default async function DeliveryPage({
   searchParams,
@@ -26,10 +27,35 @@ export default async function DeliveryPage({
     .in("status", ["packed", "dispatched", "out_for_delivery", "delivered"]);
 
   const orderIds = (orders ?? []).map((o) => o.id);
-  const { data: bills } = orderIds.length
-    ? await supabase.from("bills").select("order_id, total, net_due").in("order_id", orderIds)
-    : { data: [] };
+  const [{ data: bills }, { data: orderLines }, { data: packages }] = await Promise.all([
+    orderIds.length
+      ? supabase.from("bills").select("order_id, total, net_due").in("order_id", orderIds)
+      : Promise.resolve({ data: [] }),
+    orderIds.length
+      ? supabase.from("order_lines").select("order_id, package_id").in("order_id", orderIds)
+      : Promise.resolve({ data: [] }),
+    orderIds.length
+      ? supabase.from("order_packages").select("id, order_id, packaging_type").in("order_id", orderIds)
+      : Promise.resolve({ data: [] }),
+  ]);
   const billByOrderId = new Map((bills ?? []).map((b) => [b.order_id, b]));
+
+  const packagingTypeByPackageId = new Map((packages ?? []).map((p) => [p.id, p.packaging_type as PackagingType]));
+  const usedPackageIdsByOrderId = new Map<string, Set<string>>();
+  for (const line of orderLines ?? []) {
+    if (!line.package_id) continue;
+    const set = usedPackageIdsByOrderId.get(line.order_id) ?? new Set<string>();
+    set.add(line.package_id);
+    usedPackageIdsByOrderId.set(line.order_id, set);
+  }
+  const packagingSummaryByOrderId = new Map<string, string>();
+  for (const [orderId, packageIds] of usedPackageIdsByOrderId) {
+    const used = [...packageIds]
+      .map((id) => packagingTypeByPackageId.get(id))
+      .filter((t): t is PackagingType => t !== undefined)
+      .map((packagingType) => ({ packagingType }));
+    packagingSummaryByOrderId.set(orderId, summarizePackaging(used));
+  }
 
   const allOrders = (orders ?? [])
     .map((order) => {
@@ -49,6 +75,7 @@ export default async function DeliveryPage({
         zone: customer?.zone ?? ("Unassigned" as Zone),
         billTotal: bill?.total ?? null,
         netDue: bill?.net_due ?? null,
+        packagingSummary: packagingSummaryByOrderId.get(order.id) || null,
       };
     })
     .sort((a, b) => compareByZone(a.zone, b.zone) || a.customerName.localeCompare(b.customerName));

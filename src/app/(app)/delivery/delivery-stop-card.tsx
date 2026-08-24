@@ -25,6 +25,7 @@ interface Stop {
   zone: string;
   billTotal: number | null;
   netDue: number | null;
+  packagingSummary: string | null;
 }
 
 const SWIPE_THRESHOLD = 90;
@@ -112,6 +113,9 @@ export function DeliveryStopCard({
               <MapPin className="size-3.5" aria-hidden="true" />
               {stop.zone} · {stop.address}
             </p>
+            {stop.packagingSummary && (
+              <p className="mt-0.5 font-sans text-[12px] font-semibold text-tertiary">{stop.packagingSummary}</p>
+            )}
           </div>
         </div>
         <Badge style={displayStatusChipStyle(displayStatus)} size="sm" className="shrink-0">

@@ -17,7 +17,8 @@ import { useToast } from "@/components/ui/toast";
 import { deriveDisplayStatus, displayStatusChipStyle, DISPLAY_STATUS_LABEL } from "@/lib/orders/status-display";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { cn } from "@/lib/cn";
-import type { OrderStatus, UnitType } from "@/lib/supabase/database.types";
+import { PACKAGING_TYPES, PACKAGING_LABEL, summarizePackaging } from "@/lib/packing/packaging";
+import type { OrderStatus, UnitType, PackagingType } from "@/lib/supabase/database.types";
 
 export interface PackingLine {
   id: string;
@@ -30,6 +31,7 @@ export interface PackingLine {
   actualQty: number | null;
   lockedPricePerUnit: number | null;
   lineStatus: "pending" | "packed" | "unavailable";
+  packageId: string | null;
 }
 
 export interface PackingOrder {
@@ -40,6 +42,7 @@ export interface PackingOrder {
   customerPhone: string | null;
   zone: string;
   lines: PackingLine[];
+  packages: { id: string; packagingType: PackagingType }[];
 }
 
 type View = "queue" | "detail" | "bill";
@@ -151,21 +154,85 @@ function EditableDetail({
   type LineState = {
     resolution: "pending" | "packed" | "unavailable";
     actualQty: string;
+    packageRef: string;
     addSubstitute: boolean;
     substituteProductId: string;
     substituteQty: string;
+    substitutePackageRef: string;
   };
   const [lineStates, setLineStates] = useState<Record<string, LineState>>(() =>
     Object.fromEntries(
       order.lines.map((line) => [
         line.id,
-        { resolution: "pending", actualQty: "", addSubstitute: false, substituteProductId: "", substituteQty: "" },
+        {
+          resolution: "pending",
+          actualQty: "",
+          packageRef: line.packageId ?? "",
+          addSubstitute: false,
+          substituteProductId: "",
+          substituteQty: "",
+          substitutePackageRef: "",
+        },
       ]),
     ),
   );
+  // Boxes/packets created during this editing session ("New: Big Box" picked
+  // on some line) -- not saved until finalize. Keyed by a client tempId so
+  // later lines can pick "the box I just made" before it has a real uuid.
+  const [newPackages, setNewPackages] = useState<{ tempId: string; packagingType: PackagingType }[]>([]);
 
   function updateLine(lineId: string, patch: Partial<LineState>) {
     setLineStates((prev) => ({ ...prev, [lineId]: { ...prev[lineId], ...patch } }));
+  }
+
+  // Every box/packet available to assign a line to: already-saved ones from
+  // this order plus ones created earlier in this same session, annotated
+  // with which products are currently assigned to each (for the dropdown
+  // label, e.g. "Big Box (Banana, Papaya)").
+  const packageOptions = [
+    ...order.packages.map((p) => ({ ref: p.id, packagingType: p.packagingType })),
+    ...newPackages.map((p) => ({ ref: p.tempId, packagingType: p.packagingType })),
+  ].map((p) => {
+    const contents = order.lines
+      .filter((line) => lineStates[line.id]?.packageRef === p.ref)
+      .map((line) => line.productName);
+    return { ...p, contents };
+  });
+
+  function packagingSelectOptions() {
+    return (
+      <>
+        <option value="">No packaging</option>
+        {packageOptions.length > 0 && (
+          <optgroup label="Add to existing">
+            {packageOptions.map((p) => (
+              <option key={p.ref} value={p.ref}>
+                {PACKAGING_LABEL[p.packagingType]}
+                {p.contents.length > 0 ? ` (${p.contents.join(", ")})` : ""}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        <optgroup label="New">
+          {PACKAGING_TYPES.map((t) => (
+            <option key={t.value} value={`new:${t.value}`}>
+              New: {t.label}
+            </option>
+          ))}
+        </optgroup>
+      </>
+    );
+  }
+
+  // Turns a <select> value into the packageRef to store on the line: passes
+  // through an existing ref unchanged, or mints a new local package (and
+  // registers it in newPackages) for a "new:<type>" selection.
+  function resolvePackagingSelection(value: string): string {
+    if (!value.startsWith("new:")) return value;
+    const packagingType = value.slice(4) as PackagingType;
+    const tempId = `new-${crypto.randomUUID()}`;
+    setNewPackages((prev) => [...prev, { tempId, packagingType }]);
+    return tempId;
   }
 
   const pendingLines = order.lines.filter((l) => lineStates[l.id]?.resolution === "pending");
@@ -188,6 +255,7 @@ function EditableDetail({
           lineId: line.id,
           resolution: s.resolution as "packed" | "unavailable",
           actualQty: s.resolution === "packed" ? Number(s.actualQty) : null,
+          packageRef: s.resolution === "packed" ? s.packageRef : null,
         };
       });
       const substitutions = order.lines
@@ -196,8 +264,9 @@ function EditableDetail({
           substitutedForLineId: line.id,
           productId: lineStates[line.id].substituteProductId,
           actualQty: Number(lineStates[line.id].substituteQty),
+          packageRef: lineStates[line.id].substitutePackageRef,
         }));
-      const result = await finalizeOrder(order.id, resolutions, substitutions);
+      const result = await finalizeOrder(order.id, resolutions, substitutions, newPackages);
       if (!result.ok) {
         setError(result.error);
         return;
@@ -233,17 +302,26 @@ function EditableDetail({
                     </div>
                   </div>
                   {state.resolution === "packed" && (
-                    <Input
-                      size="lg"
-                      type="number"
-                      inputMode={line.unitType === "weight" ? "decimal" : "numeric"}
-                      step={line.unitType === "weight" ? "0.001" : "1"}
-                      min="0"
-                      placeholder={`Actual ${line.unitLabel ?? ""}`}
-                      value={state.actualQty}
-                      onChange={(e) => updateLine(line.id, { actualQty: e.target.value })}
-                      className={cn("w-full", Number(state.actualQty) > 0 && "border-success")}
-                    />
+                    <>
+                      <Input
+                        size="lg"
+                        type="number"
+                        inputMode={line.unitType === "weight" ? "decimal" : "numeric"}
+                        step={line.unitType === "weight" ? "0.001" : "1"}
+                        min="0"
+                        placeholder={`Actual ${line.unitLabel ?? ""}`}
+                        value={state.actualQty}
+                        onChange={(e) => updateLine(line.id, { actualQty: e.target.value })}
+                        className={cn("w-full", Number(state.actualQty) > 0 && "border-success")}
+                      />
+                      <Select
+                        className="w-full"
+                        value={state.packageRef}
+                        onChange={(e) => updateLine(line.id, { packageRef: resolvePackagingSelection(e.target.value) })}
+                      >
+                        {packagingSelectOptions()}
+                      </Select>
+                    </>
                   )}
                   <div className="flex gap-2">
                     <button
@@ -278,28 +356,39 @@ function EditableDetail({
                     </button>
                   </div>
                   {state.resolution === "unavailable" && state.addSubstitute && (
-                    <div className="flex gap-2">
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <Select
+                          className="flex-1"
+                          value={state.substituteProductId}
+                          onChange={(e) => updateLine(line.id, { substituteProductId: e.target.value })}
+                        >
+                          <option value="">Substitute with…</option>
+                          {products.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.name}
+                            </option>
+                          ))}
+                        </Select>
+                        <Input
+                          className="w-20"
+                          type="number"
+                          step="0.001"
+                          min="0"
+                          placeholder="Qty"
+                          value={state.substituteQty}
+                          onChange={(e) => updateLine(line.id, { substituteQty: e.target.value })}
+                        />
+                      </div>
                       <Select
-                        className="flex-1"
-                        value={state.substituteProductId}
-                        onChange={(e) => updateLine(line.id, { substituteProductId: e.target.value })}
+                        className="w-full"
+                        value={state.substitutePackageRef}
+                        onChange={(e) =>
+                          updateLine(line.id, { substitutePackageRef: resolvePackagingSelection(e.target.value) })
+                        }
                       >
-                        <option value="">Substitute with…</option>
-                        {products.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
+                        {packagingSelectOptions()}
                       </Select>
-                      <Input
-                        className="w-20"
-                        type="number"
-                        step="0.001"
-                        min="0"
-                        placeholder="Qty"
-                        value={state.substituteQty}
-                        onChange={(e) => updateLine(line.id, { substituteQty: e.target.value })}
-                      />
                     </div>
                   )}
                 </div>
@@ -426,6 +515,7 @@ function PackedDetail({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const packedLines = order.lines.filter((l) => l.lineStatus === "packed");
+  const packagingSummary = summarizePackaging(order.packages);
 
   function handleGenerateBill() {
     setError(null);
@@ -447,6 +537,9 @@ function PackedDetail({
           <div className="font-sans text-[11px] font-bold uppercase tracking-wide text-success">
             ✓ Packed — ready to bill
           </div>
+          {packagingSummary && (
+            <div className="font-sans text-[12.5px] font-semibold text-muted">{packagingSummary}</div>
+          )}
           <div className="flex flex-col gap-2">
             {packedLines.map((line) => (
               <PackedLineRow key={line.id} line={line} onOverridden={() => router.refresh()} />
@@ -462,6 +555,9 @@ function PackedDetail({
           <div className="font-sans text-[11px] font-bold uppercase tracking-wide text-muted">
             Packed — waiting on admin to bill
           </div>
+          {packagingSummary && (
+            <div className="font-sans text-[12.5px] font-semibold text-muted">{packagingSummary}</div>
+          )}
           <div className="flex flex-col gap-2">
             {packedLines.map((line) => (
               <Card key={line.id} elevated className="flex items-center justify-between !space-y-0">
