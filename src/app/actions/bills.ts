@@ -7,7 +7,7 @@ import { resolveBillLinePrices } from "@/lib/billing/resolve-line-prices";
 import { computeBillTotal, computeCustomerBalance, computeNetDue } from "@/lib/billing/compute";
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
 import { planAdvanceAllocation, type AdvanceCredit } from "@/lib/billing/allocate";
-import { validatePriceOverride } from "@/lib/billing/override";
+import { validatePriceOverride, validateQuantityOverride } from "@/lib/billing/override";
 
 export type GenerateBillResult =
   | { ok: true; messageText: string; customerPhone: string | null }
@@ -284,5 +284,71 @@ export async function overrideLinePrice(
   // No revalidatePath here either -- same reasoning as finalizeOrder; the
   // packer/admin client calls router.refresh() itself after a successful
   // override so the price shown before "Generate Bill →" updates in place.
+  return { ok: true };
+}
+
+export type OverrideLineQuantityResult = { ok: true } | { ok: false; error: string };
+
+// Admin-only correction of a packer's actual_qty entry at the same
+// billing-time review step as overrideLinePrice -- see
+// validateQuantityOverride for the eligibility guards and the audit trail
+// this writes to quantity_overrides (migration 0019). Deliberately does not
+// touch locked_price_per_unit: a line whose price hasn't been separately
+// overridden keeps resolving live off the current actual_qty (see
+// resolveBillLinePrices), so a qty-only correction re-prices itself.
+export async function overrideLineQuantity(
+  orderLineId: string,
+  newQty: number,
+  reason: string,
+): Promise<OverrideLineQuantityResult> {
+  const profile = await requireRole(["admin"]);
+  const supabase = await createClient();
+
+  const { data: line, error: lineError } = await supabase
+    .from("order_lines")
+    .select("id, order_id, actual_qty, line_status, orders(status)")
+    .eq("id", orderLineId)
+    .single();
+  if (lineError || !line) {
+    return { ok: false, error: lineError?.message ?? "Line not found." };
+  }
+  const order = line.orders as unknown as { status: string } | null;
+
+  const { data: existingBill } = await supabase
+    .from("bills")
+    .select("id")
+    .eq("order_id", line.order_id)
+    .maybeSingle();
+
+  const validation = validateQuantityOverride({
+    newQty,
+    reason,
+    orderStatus: order?.status ?? "",
+    lineStatus: line.line_status,
+    hasBill: existingBill != null,
+  });
+  if (!validation.ok) {
+    return validation;
+  }
+
+  const { error: overrideError } = await supabase.from("quantity_overrides").insert({
+    order_line_id: orderLineId,
+    previous_qty: line.actual_qty,
+    new_qty: newQty,
+    reason: reason.trim(),
+    overridden_by: profile.id,
+  });
+  if (overrideError) {
+    return { ok: false, error: overrideError.message };
+  }
+
+  const { error: updateError } = await supabase
+    .from("order_lines")
+    .update({ actual_qty: newQty })
+    .eq("id", orderLineId);
+  if (updateError) {
+    return { ok: false, error: updateError.message };
+  }
+
   return { ok: true };
 }

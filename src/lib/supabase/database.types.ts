@@ -397,6 +397,36 @@ export interface Database {
         };
         Relationships: [];
       };
+      quantity_overrides: {
+        Row: {
+          id: string;
+          order_line_id: string;
+          previous_qty: number | null;
+          new_qty: number;
+          reason: string;
+          overridden_by: string | null;
+          overridden_at: string;
+        };
+        Insert: {
+          id?: string;
+          order_line_id: string;
+          previous_qty?: number | null;
+          new_qty: number;
+          reason: string;
+          overridden_by?: string | null;
+          overridden_at?: string;
+        };
+        Update: {
+          id?: string;
+          order_line_id?: string;
+          previous_qty?: number | null;
+          new_qty?: number;
+          reason?: string;
+          overridden_by?: string | null;
+          overridden_at?: string;
+        };
+        Relationships: [];
+      };
       bills: {
         Row: {
           id: string;

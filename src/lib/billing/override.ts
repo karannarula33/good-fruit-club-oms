@@ -30,3 +30,31 @@ export function validatePriceOverride(input: PriceOverrideInput): PriceOverrideV
   }
   return { ok: true };
 }
+
+// Same eligibility guards as validatePriceOverride, for correcting a
+// packer's actual_qty entry at the same billing-time review step.
+export interface QuantityOverrideInput {
+  newQty: number;
+  reason: string;
+  orderStatus: string;
+  lineStatus: string;
+  hasBill: boolean;
+}
+
+export type QuantityOverrideValidation = { ok: true } | { ok: false; error: string };
+
+export function validateQuantityOverride(input: QuantityOverrideInput): QuantityOverrideValidation {
+  if (input.hasBill) {
+    return { ok: false, error: "This order is already billed — quantity is locked in the bill." };
+  }
+  if (input.orderStatus !== "packed" || input.lineStatus !== "packed") {
+    return { ok: false, error: "This line is no longer eligible for a quantity override." };
+  }
+  if (!Number.isFinite(input.newQty) || input.newQty <= 0) {
+    return { ok: false, error: "Quantity must be greater than zero." };
+  }
+  if (input.reason.trim().length === 0) {
+    return { ok: false, error: "A reason is required." };
+  }
+  return { ok: true };
+}

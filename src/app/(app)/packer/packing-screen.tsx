@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from "motion/react";
 import { ChevronLeft, PackageCheck, Ban, MessageCircle, XCircle, Pencil } from "lucide-react";
 import { finalizeOrder } from "@/app/actions/packing";
-import { generateBill, overrideLinePrice } from "@/app/actions/bills";
+import { generateBill, overrideLinePrice, overrideLineQuantity } from "@/app/actions/bills";
 import { toWhatsAppDigits } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -416,6 +416,7 @@ function EditableDetail({
 function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden: () => void }) {
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
+  const [qtyInput, setQtyInput] = useState("");
   const [priceInput, setPriceInput] = useState("");
   const [reasonInput, setReasonInput] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -424,6 +425,7 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
   const qty = line.actualQty ?? 0;
 
   function startEditing() {
+    setQtyInput(qty ? String(qty) : "");
     setPriceInput(price ? String(price) : "");
     setReasonInput("");
     setError(null);
@@ -432,10 +434,22 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
 
   function handleSave() {
     setError(null);
+    const newQty = Number(qtyInput);
+    const newPrice = Number(priceInput);
+    const qtyChanged = newQty !== qty;
+    const priceChanged = newPrice !== price;
+    if (!qtyChanged && !priceChanged) {
+      setEditing(false);
+      return;
+    }
     startTransition(async () => {
-      const result = await overrideLinePrice(line.id, Number(priceInput), reasonInput);
-      if (!result.ok) {
-        setError(result.error);
+      const results = await Promise.all([
+        qtyChanged ? overrideLineQuantity(line.id, newQty, reasonInput) : null,
+        priceChanged ? overrideLinePrice(line.id, newPrice, reasonInput) : null,
+      ]);
+      const failed = results.find((r) => r && !r.ok);
+      if (failed && !failed.ok) {
+        setError(failed.error);
         return;
       }
       setEditing(false);
@@ -451,6 +465,17 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
           <Input
             size="lg"
             type="number"
+            inputMode={line.unitType === "weight" ? "decimal" : "numeric"}
+            step={line.unitType === "weight" ? "0.001" : "1"}
+            min="0"
+            placeholder={`New ${line.unitLabel ?? "qty"}`}
+            value={qtyInput}
+            onChange={(e) => setQtyInput(e.target.value)}
+            className="w-24"
+          />
+          <Input
+            size="lg"
+            type="number"
             step="0.01"
             min="0"
             placeholder="New price / unit"
@@ -458,21 +483,21 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
             onChange={(e) => setPriceInput(e.target.value)}
             className="w-32"
           />
-          <Input
-            size="lg"
-            placeholder="Reason (required)"
-            value={reasonInput}
-            onChange={(e) => setReasonInput(e.target.value)}
-            className="flex-1"
-          />
         </div>
+        <Input
+          size="lg"
+          placeholder="Reason (required)"
+          value={reasonInput}
+          onChange={(e) => setReasonInput(e.target.value)}
+          className="w-full"
+        />
         {error && <FormError>{error}</FormError>}
         <div className="flex gap-2">
           <Button variant="secondary" fullWidth onClick={() => setEditing(false)} disabled={pending}>
             Cancel
           </Button>
           <Button variant="dark" fullWidth onClick={handleSave} pending={pending} pendingText="Saving…">
-            Save price
+            Save changes
           </Button>
         </div>
       </Card>
@@ -488,7 +513,7 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
           <button
             type="button"
             onClick={startEditing}
-            aria-label={`Edit price for ${line.productName}`}
+            aria-label={`Edit quantity or price for ${line.productName}`}
             className="text-tertiary"
           >
             <Pencil className="size-3" />
