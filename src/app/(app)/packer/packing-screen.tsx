@@ -6,6 +6,7 @@ import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } f
 import { ChevronLeft, PackageCheck, Ban, MessageCircle, XCircle, Pencil } from "lucide-react";
 import { finalizeOrder } from "@/app/actions/packing";
 import { generateBill, overrideLinePrice, overrideLineQuantity } from "@/app/actions/bills";
+import { updateCustomerSalutation } from "@/app/actions/customers";
 import { toWhatsAppDigits } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -38,6 +39,7 @@ export interface PackingOrder {
   id: string;
   status: OrderStatus;
   hasBill: boolean;
+  customerId: string;
   customerName: string;
   customerPhone: string | null;
   zone: string;
@@ -539,18 +541,39 @@ function PackedDetail({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [needsSalutation, setNeedsSalutation] = useState(false);
   const packedLines = order.lines.filter((l) => l.lineStatus === "packed");
   const packagingSummary = summarizePackaging(order.packages);
 
-  function handleGenerateBill() {
+  async function attemptGenerateBill() {
     setError(null);
+    const result = await generateBill(order.id);
+    if (!result.ok) {
+      if (result.reason === "unpriced") {
+        setError(`${result.unpricedLineCount} item(s) still need a price.`);
+      } else if (result.reason === "salutation_needed") {
+        setNeedsSalutation(true);
+      } else {
+        setError(result.error);
+      }
+      return;
+    }
+    setNeedsSalutation(false);
+    onBillGenerated({ messageText: result.messageText, customerPhone: result.customerPhone });
+  }
+
+  function handleGenerateBill() {
+    startTransition(attemptGenerateBill);
+  }
+
+  function handlePickSalutation(salutation: "Sir" | "Ma'am") {
     startTransition(async () => {
-      const result = await generateBill(order.id);
+      const result = await updateCustomerSalutation(order.customerId, salutation);
       if (!result.ok) {
-        setError(result.reason === "unpriced" ? `${result.unpricedLineCount} item(s) still need a price.` : result.error);
+        setError(result.error);
         return;
       }
-      onBillGenerated({ messageText: result.messageText, customerPhone: result.customerPhone });
+      await attemptGenerateBill();
     });
   }
 
@@ -571,9 +594,25 @@ function PackedDetail({
             ))}
           </div>
           {error && <FormError>{error}</FormError>}
-          <Button variant="primary" fullWidth onClick={handleGenerateBill} pending={pending} pendingText="Generating…">
-            Generate Bill →
-          </Button>
+          {needsSalutation ? (
+            <div className="space-y-2 rounded-2xl bg-warning-bg p-3.5">
+              <div className="font-sans text-[12.5px] font-semibold text-warning-text">
+                Couldn&apos;t tell from the name — pick one:
+              </div>
+              <div className="flex gap-2">
+                <Button variant="secondary" fullWidth disabled={pending} onClick={() => handlePickSalutation("Sir")}>
+                  Sir
+                </Button>
+                <Button variant="secondary" fullWidth disabled={pending} onClick={() => handlePickSalutation("Ma'am")}>
+                  Ma&apos;am
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="primary" fullWidth onClick={handleGenerateBill} pending={pending} pendingText="Generating…">
+              Generate Bill →
+            </Button>
+          )}
         </>
       ) : (
         <>

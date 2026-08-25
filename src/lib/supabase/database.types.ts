@@ -24,6 +24,7 @@ export type OrderStatus =
   | "cancelled";
 export type LineStatus = "pending" | "packed" | "unavailable";
 export type PackagingType = "big_box" | "medium_box" | "small_box" | "small_packet" | "big_packet" | "tiny_box";
+export type Salutation = "Sir" | "Ma'am";
 export type ParseConfidence = "clean" | "flagged";
 export type LedgerEntryType = "debit" | "credit";
 export type LedgerMode = "cash" | "upi" | "other";
@@ -181,6 +182,7 @@ export interface Database {
           zone: CustomerZone;
           notes: string | null;
           created_at: string;
+          salutation: Salutation | null;
         };
         Insert: {
           id?: string;
@@ -190,6 +192,7 @@ export interface Database {
           zone: CustomerZone;
           notes?: string | null;
           created_at?: string;
+          salutation?: Salutation | null;
         };
         Update: {
           id?: string;
@@ -199,6 +202,7 @@ export interface Database {
           zone?: CustomerZone;
           notes?: string | null;
           created_at?: string;
+          salutation?: Salutation | null;
         };
         Relationships: [];
       };

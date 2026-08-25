@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { ZoneSelect } from "./zone-select";
+import { SalutationSelect } from "./salutation-select";
 import type { Zone } from "@/lib/customers/zone";
+import type { Salutation } from "@/lib/supabase/database.types";
 
 interface CustomerRow {
   id: string;
@@ -15,6 +17,7 @@ interface CustomerRow {
   address: string;
   zone: Zone;
   notes: string | null;
+  salutation: Salutation | null;
 }
 
 export function CustomerList({ customers }: { customers: CustomerRow[] }) {
@@ -49,7 +52,10 @@ export function CustomerList({ customers }: { customers: CustomerRow[] }) {
                   </div>
                 </div>
               </Link>
-              <ZoneSelect customerId={customer.id} zone={customer.zone} />
+              <div className="flex flex-col items-end gap-1.5">
+                <ZoneSelect customerId={customer.id} zone={customer.zone} />
+                <SalutationSelect customerId={customer.id} salutation={customer.salutation} />
+              </div>
             </div>
             {customer.notes && <div className="font-sans text-xs text-muted">{customer.notes}</div>}
           </Card>

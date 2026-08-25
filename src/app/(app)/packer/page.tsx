@@ -137,6 +137,7 @@ export default async function PackerPage({
         id: order.id,
         status: order.status,
         hasBill: billedIds.has(order.id),
+        customerId: order.customer_id,
         customerName: customer?.display_name ?? "Unknown customer",
         customerPhone: customer?.phone ?? null,
         zone: customer?.zone ?? "",

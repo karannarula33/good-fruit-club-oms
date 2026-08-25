@@ -8,10 +8,12 @@ import { computeBillTotal, computeCustomerBalance, computeNetDue } from "@/lib/b
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
 import { planAdvanceAllocation, type AdvanceCredit } from "@/lib/billing/allocate";
 import { validatePriceOverride, validateQuantityOverride } from "@/lib/billing/override";
+import { classifySalutation } from "@/lib/parser/classify-salutation";
 
 export type GenerateBillResult =
   | { ok: true; messageText: string; customerPhone: string | null }
   | { ok: false; reason: "unpriced"; unpricedLineCount: number }
+  | { ok: false; reason: "salutation_needed" }
   | { ok: false; reason: "error"; error: string };
 
 // Admin-only: packing and billing are two separately-triggered steps
@@ -32,7 +34,7 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
 
   const { data: customer, error: customerError } = await supabase
     .from("customers")
-    .select("display_name, phone")
+    .select("display_name, phone, salutation")
     .eq("id", order.customer_id)
     .single();
   if (customerError || !customer) {
@@ -48,6 +50,26 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
     .maybeSingle();
   if (existingBill) {
     return { ok: true, messageText: existingBill.message_text ?? "", customerPhone: customer.phone };
+  }
+
+  // Classified once per customer and cached on customers.salutation --
+  // never re-classified once set. A genuinely ambiguous name (business,
+  // couple, initials) blocks billing until the admin picks Sir/Ma'am
+  // manually (updateCustomerSalutation), same "never guess" guard as prices.
+  let salutation = customer.salutation;
+  if (!salutation) {
+    const classified = await classifySalutation(customer.display_name);
+    if (classified === "unknown") {
+      return { ok: false, reason: "salutation_needed" };
+    }
+    salutation = classified;
+    const { error: salutationError } = await supabase
+      .from("customers")
+      .update({ salutation })
+      .eq("id", order.customer_id);
+    if (salutationError) {
+      return { ok: false, reason: "error", error: salutationError.message };
+    }
   }
 
   const { data: lineRows, error: linesError } = await supabase
@@ -143,7 +165,7 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
   });
 
   const messageText = buildBillMessage({
-    customerName: customer.display_name,
+    salutation,
     deliveryDate: order.delivery_date,
     lines: billLines,
     total,

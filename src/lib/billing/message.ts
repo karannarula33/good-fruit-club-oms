@@ -4,6 +4,11 @@
 // advance, net amount due (always shown, never optional), payment line.
 // All customer-facing communication is from Sunita's identity -- the
 // greeting introduces her; sign-off is the user's exact chosen text.
+//
+// Greeting is salutation-only ("Hello Sir," / "Hello Ma'am,"), never the
+// customer's name -- the salutation is resolved once per customer (see
+// src/lib/parser/classify-salutation.ts) and cached on customers.salutation,
+// never guessed when ambiguous.
 
 const UPI_ID = "karannarula20@okhdfcbank";
 const SIGN_OFF = "– Good Fruit Club";
@@ -38,14 +43,14 @@ export interface BillLineItem {
 }
 
 export function buildBillMessage(params: {
-  customerName: string;
+  salutation: "Sir" | "Ma'am";
   deliveryDate: string;
   lines: BillLineItem[];
   total: number;
   prevBalance: number;
   netDue: number;
 }): string {
-  const { customerName, deliveryDate, lines, total, prevBalance, netDue } = params;
+  const { salutation, deliveryDate, lines, total, prevBalance, netDue } = params;
 
   const lineText =
     lines.length > 0
@@ -61,7 +66,7 @@ export function buildBillMessage(params: {
   const balanceLine = `${balanceLabel}: ${formatRupees(Math.abs(prevBalance))}`;
 
   return [
-    `Hi ${customerName},`,
+    `Hello ${salutation},`,
     "",
     `Here's your Good Fruit Club bill for ${formatDateOnly(deliveryDate)}:`,
     "",
