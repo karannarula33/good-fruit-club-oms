@@ -4,7 +4,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
 import { resolveBillLinePrices } from "@/lib/billing/resolve-line-prices";
-import { computeBillTotal, computeCustomerBalance, computeNetDue } from "@/lib/billing/compute";
+import { computeBillTotal, computeCustomerBalance, computeNetDue, roundLineAmount } from "@/lib/billing/compute";
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
 import { planAdvanceAllocation, type AdvanceCredit } from "@/lib/billing/allocate";
 import { validatePriceOverride, validateQuantityOverride } from "@/lib/billing/override";
@@ -160,7 +160,7 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
       actualQty,
       unitLabel: product?.unit_label ?? null,
       ratePerUnit,
-      amount: actualQty * ratePerUnit,
+      amount: roundLineAmount(actualQty, ratePerUnit),
     };
   });
 

@@ -1,11 +1,12 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
+import { summarizePackaging } from "@/lib/packing/packaging";
 import { PageHeader } from "@/components/ui/page-header";
 import { DateNav } from "@/components/ui/date-nav";
 import { OrderExportPanel } from "./order-export-panel";
 import { ManageOrdersList, type ManageOrderRow } from "./manage-orders-list";
-import type { OrderStatus } from "@/lib/supabase/database.types";
+import type { OrderStatus, PackagingType } from "@/lib/supabase/database.types";
 
 export default async function ManageOrdersPage({
   searchParams,
@@ -28,22 +29,47 @@ export default async function ManageOrdersPage({
   const orderIds = (orders ?? []).map((o) => o.id);
   const customerIds = [...new Set((orders ?? []).map((o) => o.customer_id))];
 
-  const [{ data: customers }, { data: orderLines }, { data: products }, { data: bills }] = await Promise.all([
-    customerIds.length
-      ? supabase.from("customers").select("id, display_name").in("id", customerIds)
-      : Promise.resolve({ data: [] }),
-    orderIds.length
-      ? supabase.from("order_lines").select("id, order_id, product_id, ordered_qty, ordered_unit").in("order_id", orderIds)
-      : Promise.resolve({ data: [] }),
-    supabase.from("products").select("id, name, unit_label"),
-    orderIds.length
-      ? supabase.from("bills").select("order_id, total").in("order_id", orderIds)
-      : Promise.resolve({ data: [] }),
-  ]);
+  const [{ data: customers }, { data: orderLines }, { data: products }, { data: bills }, { data: packages }] =
+    await Promise.all([
+      customerIds.length
+        ? supabase.from("customers").select("id, display_name").in("id", customerIds)
+        : Promise.resolve({ data: [] }),
+      orderIds.length
+        ? supabase
+            .from("order_lines")
+            .select("id, order_id, product_id, ordered_qty, ordered_unit, package_id")
+            .in("order_id", orderIds)
+        : Promise.resolve({ data: [] }),
+      supabase.from("products").select("id, name, unit_label"),
+      orderIds.length
+        ? supabase.from("bills").select("order_id, total").in("order_id", orderIds)
+        : Promise.resolve({ data: [] }),
+      orderIds.length
+        ? supabase.from("order_packages").select("id, order_id, packaging_type").in("order_id", orderIds)
+        : Promise.resolve({ data: [] }),
+    ]);
 
   const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
   const productById = new Map((products ?? []).map((p) => [p.id, p]));
   const billByOrderId = new Map((bills ?? []).map((b) => [b.order_id, b.total]));
+  const totalBilled = (bills ?? []).reduce((sum, b) => sum + b.total, 0);
+
+  const packagingTypeByPackageId = new Map((packages ?? []).map((p) => [p.id, p.packaging_type as PackagingType]));
+  const usedPackageIdsByOrderId = new Map<string, Set<string>>();
+  for (const line of orderLines ?? []) {
+    if (!line.package_id) continue;
+    const set = usedPackageIdsByOrderId.get(line.order_id) ?? new Set<string>();
+    set.add(line.package_id);
+    usedPackageIdsByOrderId.set(line.order_id, set);
+  }
+  const packagingSummaryByOrderId = new Map<string, string>();
+  for (const [orderId, packageIds] of usedPackageIdsByOrderId) {
+    const used = [...packageIds]
+      .map((id) => packagingTypeByPackageId.get(id))
+      .filter((t): t is PackagingType => t !== undefined)
+      .map((packagingType) => ({ packagingType }));
+    packagingSummaryByOrderId.set(orderId, summarizePackaging(used));
+  }
 
   const linesByOrderId = new Map<string, { id: string; product_id: string | null; ordered_qty: number | null; ordered_unit: string | null }[]>();
   for (const line of orderLines ?? []) {
@@ -71,6 +97,7 @@ export default async function ManageOrdersPage({
       hasBill: billByOrderId.has(order.id),
       billTotal: billByOrderId.get(order.id) ?? null,
       lines,
+      packagingSummary: packagingSummaryByOrderId.get(order.id) || null,
     };
   });
 
@@ -78,7 +105,7 @@ export default async function ManageOrdersPage({
     <div className="flex flex-col gap-5 px-[18px] pt-5 pb-6">
       <PageHeader
         title="Manage Orders"
-        subtitle="Delete test or wrongly entered orders"
+        subtitle={`${orders?.length ?? 0} order${(orders?.length ?? 0) === 1 ? "" : "s"} · ₹${totalBilled.toFixed(2)} billed`}
         action={<DateNav date={date} basePath="/admin/manage-orders" />}
       />
       <OrderExportPanel date={date} />

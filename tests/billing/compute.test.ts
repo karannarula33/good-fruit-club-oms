@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { computeBillTotal, computeCustomerBalance, computeNetDue, derivePaymentStatus } from "@/lib/billing/compute";
+import {
+  computeBillTotal,
+  computeCustomerBalance,
+  computeNetDue,
+  derivePaymentStatus,
+  roundLineAmount,
+} from "@/lib/billing/compute";
 
 describe("computeBillTotal", () => {
   it("sums qty * price across lines", () => {
@@ -20,13 +26,31 @@ describe("computeBillTotal", () => {
     expect(unpricedLineCount).toBe(1);
   });
 
-  it("rounds decimal-prone quantities correctly", () => {
+  it("rounds each line to the nearest whole rupee before summing", () => {
     const { total } = computeBillTotal([{ actualQty: 2.06, lockedPricePerUnit: 295 }]);
-    expect(total).toBe(607.7);
+    expect(total).toBe(608); // 607.7 rounds up to 608
+  });
+
+  it("sums per-line roundings rather than rounding the total once", () => {
+    const { total } = computeBillTotal([
+      { actualQty: 1.5, lockedPricePerUnit: 33 }, // 49.5 -> 50
+      { actualQty: 0.5, lockedPricePerUnit: 41 }, // 20.5 -> 21
+    ]);
+    expect(total).toBe(71);
   });
 
   it("returns zero total for no lines", () => {
     expect(computeBillTotal([])).toEqual({ total: 0, unpricedLineCount: 0 });
+  });
+});
+
+describe("roundLineAmount", () => {
+  it("rounds up at or above the half-rupee", () => {
+    expect(roundLineAmount(2.06, 295)).toBe(608); // 607.7
+  });
+
+  it("rounds down below the half-rupee", () => {
+    expect(roundLineAmount(1, 100.4)).toBe(100);
   });
 });
 

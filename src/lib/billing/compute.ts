@@ -8,6 +8,14 @@ export function roundToCents(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+// The WhatsApp bill must show whole-rupee amounts per line, with the order
+// total exactly matching the sum of what's printed for each item -- so each
+// line is rounded to the nearest rupee before summing, not the total rounded
+// after the fact.
+export function roundLineAmount(actualQty: number, pricePerUnit: number): number {
+  return Math.round(actualQty * pricePerUnit);
+}
+
 export interface BillableLine {
   actualQty: number;
   lockedPricePerUnit: number | null;
@@ -27,10 +35,10 @@ export function computeBillTotal(lines: BillableLine[]): ComputedBill {
       unpricedLineCount += 1;
       continue;
     }
-    total += line.actualQty * line.lockedPricePerUnit;
+    total += roundLineAmount(line.actualQty, line.lockedPricePerUnit);
   }
 
-  return { total: roundToCents(total), unpricedLineCount };
+  return { total, unpricedLineCount };
 }
 
 export interface LedgerEntryForBalance {

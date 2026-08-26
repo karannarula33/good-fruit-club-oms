@@ -104,6 +104,7 @@ function QueueOrderCard({ order, onSelect }: { order: PackingOrder; onSelect: ()
   const preview = `${order.lines.length} item${order.lines.length === 1 ? "" : "s"} · ${order.lines
     .map((l) => l.productName)
     .join(", ")}`;
+  const packagingSummary = summarizePackaging(order.packages);
   return (
     <Card
       elevated
@@ -124,6 +125,9 @@ function QueueOrderCard({ order, onSelect }: { order: PackingOrder; onSelect: ()
         </Badge>
       </div>
       <div className="font-sans text-[12.5px] font-medium text-muted">{preview}</div>
+      {packagingSummary && (
+        <div className="font-sans text-[11.5px] font-semibold text-tertiary">{packagingSummary}</div>
+      )}
     </Card>
   );
 }

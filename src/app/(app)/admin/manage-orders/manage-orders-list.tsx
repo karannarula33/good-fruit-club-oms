@@ -29,6 +29,7 @@ export interface ManageOrderRow {
   hasBill: boolean;
   billTotal: number | null;
   lines: ManageOrderLine[];
+  packagingSummary: string | null;
 }
 
 const CONFIRM_WINDOW_MS = 3000;
@@ -120,6 +121,9 @@ export function ManageOrdersList({ rows }: { rows: ManageOrderRow[] }) {
                 <div className="font-sans text-[11.5px] font-semibold text-muted">
                   {row.lines.length} item{row.lines.length === 1 ? "" : "s"}
                 </div>
+                {row.packagingSummary && (
+                  <div className="font-sans text-[11px] font-semibold text-tertiary">{row.packagingSummary}</div>
+                )}
               </div>
               <Badge size="sm" style={displayStatusChipStyle(displayStatus)}>
                 {DISPLAY_STATUS_LABEL[displayStatus]}
@@ -141,6 +145,10 @@ export function ManageOrdersList({ rows }: { rows: ManageOrderRow[] }) {
                 {DISPLAY_STATUS_LABEL[deriveDisplayStatus(openOrder.status, openOrder.hasBill)]}
               </Badge>
             </div>
+
+            {openOrder.packagingSummary && (
+              <div className="font-sans text-[12.5px] font-semibold text-tertiary">{openOrder.packagingSummary}</div>
+            )}
 
             {openOrder.hasBill && (
               <FormError>Already billed — can&apos;t be edited or deleted.</FormError>
