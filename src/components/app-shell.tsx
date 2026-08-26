@@ -22,23 +22,17 @@ const TABS: Record<Role, { href: string; label: string }[]> = {
   admin: [
     { href: "/admin/orders", label: "Orders" },
     { href: "/packer", label: "Packing" },
+    { href: "/admin/dispatch", label: "Dispatch" },
     { href: "/admin/procurement", label: "Procure" },
     { href: "/admin/prices", label: "Prices" },
     { href: "/admin/catalog", label: "Catalog" },
     { href: "/delivery", label: "Route" },
-    { href: "/status", label: "Status" },
     { href: "/admin/customers", label: "Ledger" },
     { href: "/admin/engagement", label: "Engagement" },
     { href: "/admin/manage-orders", label: "Manage" },
   ],
-  packer: [
-    { href: "/packer", label: "Packing" },
-    { href: "/status", label: "Status" },
-  ],
-  delivery: [
-    { href: "/delivery", label: "Route" },
-    { href: "/status", label: "Status" },
-  ],
+  packer: [{ href: "/packer", label: "Packing" }],
+  delivery: [{ href: "/delivery", label: "Route" }],
 };
 
 export function AppShell({

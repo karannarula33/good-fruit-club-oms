@@ -21,6 +21,7 @@ export type OrderStatus =
   | "dispatched"
   | "out_for_delivery"
   | "delivered"
+  | "undelivered"
   | "cancelled";
 export type LineStatus = "pending" | "packed" | "unavailable";
 export type PackagingType = "big_box" | "medium_box" | "small_box" | "small_packet" | "big_packet" | "tiny_box";
@@ -216,6 +217,7 @@ export interface Database {
           status_timestamps: Record<string, string>;
           raw_paste: string | null;
           notes: string | null;
+          undelivered_reason: string | null;
           created_by: string | null;
           created_at: string;
           is_historical: boolean;
@@ -229,6 +231,7 @@ export interface Database {
           status_timestamps?: Record<string, string>;
           raw_paste?: string | null;
           notes?: string | null;
+          undelivered_reason?: string | null;
           created_by?: string | null;
           created_at?: string;
           is_historical?: boolean;
@@ -242,6 +245,7 @@ export interface Database {
           status_timestamps?: Record<string, string>;
           raw_paste?: string | null;
           notes?: string | null;
+          undelivered_reason?: string | null;
           created_by?: string | null;
           created_at?: string;
           is_historical?: boolean;

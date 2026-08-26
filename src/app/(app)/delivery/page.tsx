@@ -13,7 +13,7 @@ export default async function DeliveryPage({
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
-  const profile = await requireRole(["delivery", "admin"]);
+  await requireRole(["delivery", "admin"]);
 
   const params = await searchParams;
   const date = params.date ?? utcToIstDatetimeLocal(new Date()).slice(0, 10);
@@ -22,9 +22,9 @@ export default async function DeliveryPage({
 
   const { data: orders } = await supabase
     .from("orders")
-    .select("id, status, customer_id, customers(display_name, phone, address, zone)")
+    .select("id, status, undelivered_reason, customer_id, customers(display_name, phone, address, zone)")
     .eq("delivery_date", date)
-    .in("status", ["packed", "dispatched", "out_for_delivery", "delivered"]);
+    .in("status", ["dispatched", "out_for_delivery", "delivered", "undelivered"]);
 
   const orderIds = (orders ?? []).map((o) => o.id);
   const [{ data: bills }, { data: orderLines }, { data: packages }] = await Promise.all([
@@ -57,7 +57,7 @@ export default async function DeliveryPage({
     packagingSummaryByOrderId.set(orderId, summarizePackaging(used));
   }
 
-  const allOrders = (orders ?? [])
+  const stops = (orders ?? [])
     .map((order) => {
       const customer = order.customers as unknown as {
         display_name: string;
@@ -76,12 +76,10 @@ export default async function DeliveryPage({
         billTotal: bill?.total ?? null,
         netDue: bill?.net_due ?? null,
         packagingSummary: packagingSummaryByOrderId.get(order.id) || null,
+        undeliveredReason: order.undelivered_reason,
       };
     })
     .sort((a, b) => compareByZone(a.zone, b.zone) || a.customerName.localeCompare(b.customerName));
-
-  const readyToDispatch = allOrders.filter((o) => o.status === "packed" && o.billTotal !== null);
-  const stops = allOrders.filter((o) => o.status !== "packed");
 
   return (
     <div className="px-[18px] pt-5 pb-4">
@@ -91,7 +89,7 @@ export default async function DeliveryPage({
         action={<DateNav date={date} basePath="/delivery" />}
       />
       <div className="mt-4">
-        <DeliveryStopsBoard key={date} readyToDispatch={readyToDispatch} stops={stops} isAdmin={profile.role === "admin"} />
+        <DeliveryStopsBoard key={date} stops={stops} />
       </div>
     </div>
   );

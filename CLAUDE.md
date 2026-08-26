@@ -54,10 +54,11 @@ A substituted item was not on the original order, so it has no price lock. It pr
 ### 3.5 Order lifecycle
 Per-order status enum, in order:
 `recorded → packed → dispatched → out_for_delivery → delivered`
-plus `cancelled` (allowed until `packed`).
+plus `cancelled` (allowed until `packed`) and `undelivered` (reachable only from `out_for_delivery`, alongside `delivered`).
 
 - `dispatched` = the packed order left Paschim Vihar for Gurgaon. It's flipped as a **batch action** ("dispatch today's packed orders") but stored per order, so a late-packed order can miss the batch.
 - Procurement is a **day-level activity, not a per-order status.** Do not add a "procured" order status.
+- `undelivered` = the delivery person couldn't complete the stop (customer refused, wasn't home, route skipped, etc.) — a single status, not split into separate "returned"/"unfulfilled" values. `orders.undelivered_reason` holds an optional free-text note. No ledger action accompanies this: if a bill's debit already exists on the order, it's left standing for the admin to resolve manually via the ledger — never auto-reversed.
 
 ### 3.6 Procurement list
 For a given delivery date, the procurement view aggregates ordered quantities by product across that day's orders into a **single checklist** — one row per product, with a subtext showing which customers make up that quantity (name + qty each).
@@ -118,9 +119,10 @@ price_items(id uuid pk, version_id refs price_versions, product_id refs products
 orders(
   id uuid pk, customer_id refs customers,
   placed_at timestamptz not null, delivery_date date not null,   -- stored, never recomputed
-  status text check in ('recorded','packed','dispatched','out_for_delivery','delivered','cancelled'),
+  status text check in ('recorded','packed','dispatched','out_for_delivery','delivered','undelivered','cancelled'),
   status_timestamps jsonb default '{}',       -- {"packed": "...", "dispatched": "..."}
   raw_paste text,                              -- original pasted message(s), audit trail
+  undelivered_reason text,                     -- optional free-text note set when status becomes 'undelivered'
   created_by refs profiles, created_at timestamptz
 )
 
@@ -212,9 +214,10 @@ DLF Phase 2 (incl. Heritage City, The Vilas) → Sushant Lok → Near Hamilton C
 - **Admin — Prices:** paste vendor list → review → publish version; view active prices.
 - **Admin — Procurement:** per delivery date, base list vs extras, "mark list sent to vendor".
 - **Packer — Packing queue (mobile-first, shared with Admin):** persistent queue sectioned by status — To Pack / Packed · Ready to Bill / Dropped. Per line on a to-pack order: big numeric input for weight/count, unavailable, substitute → "Pack & Close Order" finalizes the order (`packed`, or auto-`cancelled` if every line ended up unavailable with no substitute). Packing and billing are two separately-triggered steps, not one auto-chain: a packed order sits in "Ready to Bill" until an **admin** opens it, reviews the priced line items (packers never see prices), and taps "Generate Bill →" → bill generates → "Send bill" wa.me button.
-- **Admin/all — Status board:** live (Supabase Realtime) list of today's orders with status chips; batch "Dispatch packed orders".
-- **Delivery — Route (mobile-first):** today's `dispatched`+ orders in zone-priority order; per stop: address, phone (tap-to-call), bill amount + net due; mark `out_for_delivery` (batch) and `delivered` → payment collected prompt.
+- **Admin — Dispatch (first mile):** packed + billed orders for the selected date, checkbox multi-select, batch "Dispatch selected" (`packed` → `dispatched`). Admin-only, separate from the last-mile Route screen below.
+- **Delivery — Route (last mile, mobile-first):** today's `dispatched`+ orders in zone-priority order; per stop: address, phone (tap-to-call), bill amount + net due; mark `out_for_delivery` (batch), `delivered` → payment collected prompt, or `undelivered` → optional reason note.
 - **Admin — Customers & Ledger:** account view per customer: orders, bills, payments, balance; record payment with allocation; record advance.
+- **Admin — Manage Orders** doubles as the day's status overview (every order for the selected date with its status badge, plus per-date total billed) — there's no separate "Status board" screen.
 
 ---
 

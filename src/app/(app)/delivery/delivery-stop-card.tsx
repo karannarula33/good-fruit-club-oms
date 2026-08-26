@@ -3,8 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { motion, useMotionValue, useTransform, type PanInfo } from "motion/react";
-import { PhoneCall, MapPin, CheckCircle2, Clock } from "lucide-react";
-import { deliverOrder } from "@/app/actions/delivery";
+import { PhoneCall, MapPin, CheckCircle2, Clock, XCircle } from "lucide-react";
+import { deliverOrder, markOrderUndelivered } from "@/app/actions/delivery";
 import { toE164 } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,7 @@ interface Stop {
   billTotal: number | null;
   netDue: number | null;
   packagingSummary: string | null;
+  undeliveredReason: string | null;
 }
 
 const SWIPE_THRESHOLD = 90;
@@ -36,12 +37,14 @@ export function DeliveryStopCard({
   checked = false,
   onToggle,
   onOptimisticDeliver,
+  onOptimisticUndeliver,
 }: {
   stop: Stop;
   selectable?: boolean;
   checked?: boolean;
   onToggle?: (checked: boolean) => void;
   onOptimisticDeliver?: () => void;
+  onOptimisticUndeliver?: () => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -49,6 +52,9 @@ export function DeliveryStopCard({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [amount, setAmount] = useState(stop.netDue !== null ? String(stop.netDue) : "");
   const [mode, setMode] = useState<LedgerMode>("cash");
+  const [undeliverSheetOpen, setUndeliverSheetOpen] = useState(false);
+  const [undeliverReason, setUndeliverReason] = useState("");
+  const [undeliverError, setUndeliverError] = useState<string | null>(null);
 
   const x = useMotionValue(0);
   const deliverOpacity = useTransform(x, [20, SWIPE_THRESHOLD], [0, 1]);
@@ -80,6 +86,20 @@ export function DeliveryStopCard({
         return;
       }
       setSheetOpen(false);
+      router.refresh();
+    });
+  }
+
+  function handleConfirmUndelivered() {
+    setUndeliverError(null);
+    startTransition(async () => {
+      onOptimisticUndeliver?.();
+      const result = await markOrderUndelivered(stop.id, undeliverReason);
+      if (!result.ok) {
+        setUndeliverError(result.error);
+        return;
+      }
+      setUndeliverSheetOpen(false);
       router.refresh();
     });
   }
@@ -151,7 +171,21 @@ export function DeliveryStopCard({
           <Button variant="secondary" onClick={handleSkipPayment} disabled={pending}>
             Skip
           </Button>
+          <Button
+            variant="secondary"
+            onClick={() => setUndeliverSheetOpen(true)}
+            disabled={pending}
+            aria-label="Couldn't deliver"
+            className="text-danger-text"
+          >
+            <XCircle className="size-4" aria-hidden="true" />
+          </Button>
         </div>
+      )}
+      {stop.status === "undelivered" && stop.undeliveredReason && (
+        <p className="font-sans text-[12.5px] font-semibold text-danger-text">
+          Couldn&apos;t deliver: {stop.undeliveredReason}
+        </p>
       )}
     </Card>
   );
@@ -217,6 +251,35 @@ export function DeliveryStopCard({
           </Button>
           <Button variant="secondary" fullWidth onClick={handleSkipPayment} disabled={pending}>
             Skip (pay later)
+          </Button>
+        </div>
+      </BottomSheet>
+
+      <BottomSheet open={undeliverSheetOpen} onClose={() => setUndeliverSheetOpen(false)}>
+        <div className="space-y-3">
+          <div>
+            <div className="mb-0.5 font-display text-base font-bold text-foreground">Couldn&apos;t Deliver</div>
+            <div className="font-sans text-[12.5px] font-medium text-muted">{stop.customerName}</div>
+          </div>
+          <Input
+            size="lg"
+            value={undeliverReason}
+            onChange={(e) => setUndeliverReason(e.target.value)}
+            placeholder="Reason (optional)"
+            className="w-full"
+          />
+          {undeliverError && <FormError>{undeliverError}</FormError>}
+          <Button
+            variant="destructive"
+            fullWidth
+            onClick={handleConfirmUndelivered}
+            pending={pending}
+            pendingText="Saving…"
+          >
+            Confirm Undelivered
+          </Button>
+          <Button variant="secondary" fullWidth onClick={() => setUndeliverSheetOpen(false)} disabled={pending}>
+            Cancel
           </Button>
         </div>
       </BottomSheet>

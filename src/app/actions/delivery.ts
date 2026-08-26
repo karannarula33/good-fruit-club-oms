@@ -55,7 +55,6 @@ export async function markOutForDelivery(
   }
 
   revalidatePath("/delivery");
-  revalidatePath("/status");
   return { ok: true, count: orders.length };
 }
 
@@ -106,6 +105,47 @@ export async function deliverOrder(
   }
 
   revalidatePath("/delivery");
-  revalidatePath("/status");
+  return { ok: true };
+}
+
+// A stop the delivery person couldn't complete -- customer refused, wasn't
+// home, route skipped, etc. A single 'undelivered' status covers all of
+// these (no separate returned/unfulfilled split); `reason` is optional
+// free text for the admin's benefit. Deliberately no ledger action: if a
+// bill's debit already exists on this order, it's left standing for the
+// admin to resolve manually via the ledger -- no automatic reversal.
+export async function markOrderUndelivered(
+  orderId: string,
+  reason: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireRole(["delivery", "admin"]);
+  const supabase = await createClient();
+
+  const { data: order, error: loadError } = await supabase
+    .from("orders")
+    .select("status_timestamps")
+    .eq("id", orderId)
+    .single();
+  if (loadError || !order) {
+    return { ok: false, error: loadError?.message ?? "Order not found." };
+  }
+
+  const mergedStatusTimestamps = {
+    ...(order.status_timestamps as Record<string, string>),
+    undelivered: new Date().toISOString(),
+  };
+  const { error: updateError } = await supabase
+    .from("orders")
+    .update({
+      status: "undelivered",
+      status_timestamps: mergedStatusTimestamps,
+      undelivered_reason: reason.trim() || null,
+    })
+    .eq("id", orderId);
+  if (updateError) {
+    return { ok: false, error: updateError.message };
+  }
+
+  revalidatePath("/delivery");
   return { ok: true };
 }

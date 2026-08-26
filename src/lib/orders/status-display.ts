@@ -8,6 +8,7 @@ export const ORDER_STATUS_LABEL: Record<OrderStatus, string> = {
   dispatched: "Dispatched",
   out_for_delivery: "Out for delivery",
   delivered: "Delivered",
+  undelivered: "Undelivered",
   cancelled: "Cancelled",
 };
 
@@ -17,6 +18,7 @@ export const ORDER_STATUS_TONE: Record<OrderStatus, BadgeTone> = {
   dispatched: "info",
   out_for_delivery: "brand",
   delivered: "success",
+  undelivered: "danger",
   cancelled: "danger",
 };
 
@@ -26,6 +28,7 @@ export const ORDER_STATUS_ORDER: OrderStatus[] = [
   "dispatched",
   "out_for_delivery",
   "delivered",
+  "undelivered",
   "cancelled",
 ];
 
@@ -41,6 +44,7 @@ export const DISPLAY_STATUS_LABEL: Record<DisplayStatus, string> = {
   dispatched: "Dispatched",
   out_for_delivery: "Out for delivery",
   delivered: "Delivered",
+  undelivered: "Undelivered",
   cancelled: "Dropped",
 };
 
@@ -51,6 +55,7 @@ export const DISPLAY_STATUS_COLORS: Record<DisplayStatus, { bg: string; fg: stri
   dispatched: { bg: "#EDE3F8", fg: "#7C5AA0" },
   out_for_delivery: { bg: "#FFE4BE", fg: "#B35C1E" },
   delivered: { bg: "#E4F5EA", fg: "#2E9E5B" },
+  undelivered: { bg: "#FBE7E1", fg: "#B3432B" },
   cancelled: { bg: "#FBE7E1", fg: "#B3432B" },
 };
 

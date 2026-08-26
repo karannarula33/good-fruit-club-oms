@@ -76,6 +76,6 @@ export async function dispatchPackedOrders(
     return { ok: false, error: firstError.error.message };
   }
 
-  revalidatePath("/status");
+  revalidatePath("/admin/dispatch");
   return { ok: true, count: orders.length };
 }
