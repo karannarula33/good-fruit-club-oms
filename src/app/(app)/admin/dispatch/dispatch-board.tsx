@@ -10,6 +10,7 @@ interface DispatchOrder {
   customerName: string;
   zone: string;
   netDue: number;
+  packagingSummary: string | null;
 }
 
 export function DispatchBoard({ orders }: { orders: DispatchOrder[] }) {
@@ -51,6 +52,9 @@ export function DispatchBoard({ orders }: { orders: DispatchOrder[] }) {
               <div className="min-w-0 flex-1">
                 <div className="font-sans text-sm font-bold text-foreground">{order.customerName}</div>
                 <div className="font-sans text-[11.5px] font-semibold text-muted">{order.zone}</div>
+                {order.packagingSummary && (
+                  <div className="font-sans text-[11px] font-semibold text-tertiary">{order.packagingSummary}</div>
+                )}
               </div>
               <div className="font-display text-sm font-bold text-foreground">₹{order.netDue.toFixed(2)}</div>
             </Card>

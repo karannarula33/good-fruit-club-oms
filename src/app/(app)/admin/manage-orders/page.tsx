@@ -1,7 +1,7 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
-import { summarizePackaging } from "@/lib/packing/packaging";
+import { summarizePackagingByOrder } from "@/lib/packing/packaging";
 import { PageHeader } from "@/components/ui/page-header";
 import { DateNav } from "@/components/ui/date-nav";
 import { OrderExportPanel } from "./order-export-panel";
@@ -62,22 +62,10 @@ export default async function ManageOrdersPage({
   const billByOrderId = new Map((bills ?? []).map((b) => [b.order_id, b.total]));
   const totalBilled = (bills ?? []).reduce((sum, b) => sum + b.total, 0);
 
-  const packagingTypeByPackageId = new Map((packages ?? []).map((p) => [p.id, p.packaging_type as PackagingType]));
-  const usedPackageIdsByOrderId = new Map<string, Set<string>>();
-  for (const line of orderLines ?? []) {
-    if (!line.package_id) continue;
-    const set = usedPackageIdsByOrderId.get(line.order_id) ?? new Set<string>();
-    set.add(line.package_id);
-    usedPackageIdsByOrderId.set(line.order_id, set);
-  }
-  const packagingSummaryByOrderId = new Map<string, string>();
-  for (const [orderId, packageIds] of usedPackageIdsByOrderId) {
-    const used = [...packageIds]
-      .map((id) => packagingTypeByPackageId.get(id))
-      .filter((t): t is PackagingType => t !== undefined)
-      .map((packagingType) => ({ packagingType }));
-    packagingSummaryByOrderId.set(orderId, summarizePackaging(used));
-  }
+  const packagingSummaryByOrderId = summarizePackagingByOrder(
+    orderLines ?? [],
+    (packages ?? []).map((p) => ({ id: p.id, order_id: p.order_id, packaging_type: p.packaging_type as PackagingType })),
+  );
 
   const linesByOrderId = new Map<
     string,
