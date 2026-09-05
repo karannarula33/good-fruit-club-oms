@@ -10,7 +10,7 @@ export default async function AdminCustomersPage() {
   const supabase = await createClient();
   const { data: customers } = await supabase
     .from("customers")
-    .select("id, display_name, phone, address, zone, notes, salutation")
+    .select("id, display_name, phone, address, zone, notes, salutation, payment_mode")
     .order("display_name");
 
   // Triage-first: customers still needing a zone assignment surface at the

@@ -1,3 +1,4 @@
+import { Download } from "lucide-react";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { compareByZone, type Zone } from "@/lib/customers/zone";
@@ -68,6 +69,12 @@ export default async function DispatchPage({
         subtitle={`${readyToDispatch.length} order${readyToDispatch.length === 1 ? "" : "s"} ready to leave`}
         action={<DateNav date={date} basePath="/admin/dispatch" />}
       />
+      <a
+        href={`/api/admin/orders/delivery-sheet?date=${date}`}
+        className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-xl border border-[#ECEAE3] px-3 py-1.5 font-sans text-sm font-extrabold text-foreground hover:bg-neutral-bg"
+      >
+        <Download className="size-4" aria-hidden="true" /> Download Delivery Sheet
+      </a>
       <div className="mt-4">
         <DispatchBoard key={date} orders={readyToDispatch} />
       </div>

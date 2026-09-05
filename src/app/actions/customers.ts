@@ -4,10 +4,11 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { ZONE_ORDER } from "@/lib/customers/zone";
-import type { CustomerZone, Salutation } from "@/lib/supabase/database.types";
+import type { CustomerZone, PaymentMode, Salutation } from "@/lib/supabase/database.types";
 
 const VALID_ZONES: readonly string[] = [...ZONE_ORDER, "Unassigned"];
 const VALID_SALUTATIONS: readonly Salutation[] = ["Sir", "Ma'am"];
+const VALID_PAYMENT_MODES: readonly PaymentMode[] = ["cod", "online"];
 
 export async function updateCustomerZone(
   customerId: string,
@@ -23,6 +24,32 @@ export async function updateCustomerZone(
   const { error } = await supabase
     .from("customers")
     .update({ zone: zone as CustomerZone })
+    .eq("id", customerId);
+
+  if (error) {
+    return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/admin/customers");
+  return { ok: true };
+}
+
+// Whether the delivery sheet (src/app/api/admin/orders/delivery-sheet/route.ts)
+// should print a COD amount for this customer's orders -- see 0022_customer_payment_mode.sql.
+export async function updateCustomerPaymentMode(
+  customerId: string,
+  paymentMode: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireRole(["admin"]);
+
+  if (!VALID_PAYMENT_MODES.includes(paymentMode as PaymentMode)) {
+    return { ok: false, error: `Unknown payment mode: ${paymentMode}` };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("customers")
+    .update({ payment_mode: paymentMode as PaymentMode })
     .eq("id", customerId);
 
   if (error) {

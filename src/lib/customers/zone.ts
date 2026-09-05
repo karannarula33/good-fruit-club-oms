@@ -44,3 +44,20 @@ export function zonePriority(zone: Zone): number {
 export function compareByZone(a: Zone, b: Zone): number {
   return zonePriority(a) - zonePriority(b);
 }
+
+// Bilingual section headers for the printed delivery sheet (see
+// src/app/api/admin/orders/delivery-sheet/route.ts) -- the Hindi text for
+// zones outside the DLF Phase 2/Sushant Lok/Phase 1/Phase 3/Phase 5 set
+// hasn't appeared on a real sheet yet, so those three are a best-effort
+// translation pending correction from someone who reads the printed copy.
+export const ZONE_HEADER_LABEL: Record<Zone, string> = {
+  "DLF Phase 2": "DLF Phase 2 — फेज़ 2",
+  "Sushant Lok": "Sushant Lok — सुशांत लोक",
+  "Near Hamilton Court": "Near Hamilton Court — हैमिल्टन कोर्ट के पास",
+  "DLF Phase 1": "DLF Phase 1 — फेज़ 1",
+  "Phase 3": "DLF Phase 3 — फेज़ 3",
+  "Phase 4": "DLF Phase 4 — फेज़ 4",
+  "Phase 5": "DLF Phase 5 / Golf Course Road — फेज़ 5 / गोल्फ कोर्स रोड",
+  "Outside Gurgaon": "Outside Gurgaon — गुड़गांव के बाहर",
+  Unassigned: "Other / Ad-hoc Zones — अन्य क्षेत्र",
+};
