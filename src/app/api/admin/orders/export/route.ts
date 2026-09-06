@@ -8,6 +8,8 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { derivePaymentStatus } from "@/lib/billing/compute";
 import { formatIstDisplay } from "@/lib/time/ist";
+import { summarizePackagingByOrder } from "@/lib/packing/packaging";
+import type { PackagingType } from "@/lib/supabase/database.types";
 
 function csvField(value: string | number | null | undefined): string {
   const str = value === null || value === undefined ? "" : String(value);
@@ -26,6 +28,7 @@ const HEADER = [
   "Phone",
   "Address",
   "Zone",
+  "Packaging",
   "Order Status",
   "Packed At",
   "Dispatched At",
@@ -59,6 +62,7 @@ interface ExportOrderLine {
   actual_qty: number | null;
   line_status: string;
   is_substitution: boolean;
+  package_id: string | null;
 }
 
 export async function GET(request: Request) {
@@ -88,7 +92,7 @@ export async function GET(request: Request) {
   const orderIds = (orders ?? []).map((o) => o.id);
   const customerIds = [...new Set((orders ?? []).map((o) => o.customer_id))];
 
-  const [{ data: customers }, { data: orderLines }, { data: products }, { data: bills }, { data: allocations }] =
+  const [{ data: customers }, { data: orderLines }, { data: products }, { data: bills }, { data: allocations }, { data: packages }] =
     await Promise.all([
       customerIds.length
         ? supabase.from("customers").select("id, display_name, phone, address, zone").in("id", customerIds)
@@ -97,7 +101,7 @@ export async function GET(request: Request) {
         ? supabase
             .from("order_lines")
             .select(
-              "id, order_id, product_id, ordered_qty, ordered_unit, locked_price_per_unit, actual_qty, line_status, is_substitution",
+              "id, order_id, product_id, ordered_qty, ordered_unit, locked_price_per_unit, actual_qty, line_status, is_substitution, package_id",
             )
             .in("order_id", orderIds)
         : Promise.resolve({ data: [] }),
@@ -108,11 +112,18 @@ export async function GET(request: Request) {
       orderIds.length
         ? supabase.from("payment_allocations").select("order_id, amount").in("order_id", orderIds)
         : Promise.resolve({ data: [] }),
+      orderIds.length
+        ? supabase.from("order_packages").select("id, order_id, packaging_type").in("order_id", orderIds)
+        : Promise.resolve({ data: [] }),
     ]);
 
   const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
   const productById = new Map((products ?? []).map((p) => [p.id, p]));
   const billByOrderId = new Map((bills ?? []).map((b) => [b.order_id, b]));
+  const packagingSummaryByOrderId = summarizePackagingByOrder(
+    orderLines ?? [],
+    (packages ?? []).map((p) => ({ id: p.id, order_id: p.order_id, packaging_type: p.packaging_type as PackagingType })),
+  );
 
   const allocatedByOrderId = new Map<string, number>();
   for (const allocation of allocations ?? []) {
@@ -144,6 +155,7 @@ export async function GET(request: Request) {
       customer?.phone ?? "",
       customer?.address ?? "",
       customer?.zone ?? "",
+      packagingSummaryByOrderId.get(order.id) ?? "",
       order.status,
       timestamps.packed ? formatIstDisplay(new Date(timestamps.packed)) : "",
       timestamps.dispatched ? formatIstDisplay(new Date(timestamps.dispatched)) : "",
