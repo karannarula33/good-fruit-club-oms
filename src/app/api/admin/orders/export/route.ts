@@ -1,24 +1,21 @@
 // Manage Orders "Download" feature: a plain browser-navigable GET (linked
 // from an <a href>, not a fetch) so Content-Disposition triggers a normal
-// file download. Line-grain CSV -- one row per order line, with order/
+// file download. Line-grain workbook -- one row per order line, with order/
 // customer/bill fields repeated on every line -- so it opens straight into
-// a pivotable spreadsheet (sum qty by product, filter by zone, etc.).
+// a pivotable spreadsheet (sum qty by product, filter by zone, etc.). Real
+// .xlsx (not CSV) specifically so the Packaging column can merge cells: a
+// box holding several line items shows its label once, spanning those
+// rows, since packaging is recorded per physical box/packet
+// (order_packages) with each line pointing at the one it went into, not a
+// single label per order.
 
+import ExcelJS from "exceljs";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { derivePaymentStatus } from "@/lib/billing/compute";
 import { formatIstDisplay } from "@/lib/time/ist";
-import { summarizePackagingByOrder } from "@/lib/packing/packaging";
+import { PACKAGING_LABEL } from "@/lib/packing/packaging";
 import type { PackagingType } from "@/lib/supabase/database.types";
-
-function csvField(value: string | number | null | undefined): string {
-  const str = value === null || value === undefined ? "" : String(value);
-  return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
-}
-
-function csvRow(values: (string | number | null | undefined)[]): string {
-  return values.map(csvField).join(",") + "\r\n";
-}
 
 const HEADER = [
   "Order ID",
@@ -51,6 +48,15 @@ const HEADER = [
   "Bill Finalized At",
   "Order Notes",
 ];
+const PACKAGING_COL = HEADER.indexOf("Packaging") + 1;
+const WIDE_COLUMNS: Record<string, number> = {
+  "Order ID": 20,
+  Customer: 20,
+  Address: 32,
+  Packaging: 14,
+  Product: 20,
+  "Order Notes": 24,
+};
 
 interface ExportOrderLine {
   id: string;
@@ -63,6 +69,23 @@ interface ExportOrderLine {
   line_status: string;
   is_substitution: boolean;
   package_id: string | null;
+}
+
+// Groups an order's lines by the box/packet they share (order_lines.package_id),
+// preserving first-appearance order -- lines with no package_id each form
+// their own singleton group, since there's nothing to merge them with.
+function groupLinesByPackage(lines: ExportOrderLine[]): ExportOrderLine[][] {
+  const groups = new Map<string, ExportOrderLine[]>();
+  const order: string[] = [];
+  for (const line of lines) {
+    const key = line.package_id ?? `__unpackaged_${line.id}`;
+    if (!groups.has(key)) {
+      groups.set(key, []);
+      order.push(key);
+    }
+    groups.get(key)!.push(line);
+  }
+  return order.map((key) => groups.get(key)!);
 }
 
 export async function GET(request: Request) {
@@ -120,9 +143,8 @@ export async function GET(request: Request) {
   const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
   const productById = new Map((products ?? []).map((p) => [p.id, p]));
   const billByOrderId = new Map((bills ?? []).map((b) => [b.order_id, b]));
-  const packagingSummaryByOrderId = summarizePackagingByOrder(
-    orderLines ?? [],
-    (packages ?? []).map((p) => ({ id: p.id, order_id: p.order_id, packaging_type: p.packaging_type as PackagingType })),
+  const packagingTypeByPackageId = new Map(
+    (packages ?? []).map((p) => [p.id, p.packaging_type as PackagingType]),
   );
 
   const allocatedByOrderId = new Map<string, number>();
@@ -137,7 +159,16 @@ export async function GET(request: Request) {
     linesByOrderId.set(line.order_id, list);
   }
 
-  let csv = csvRow(HEADER);
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet("Orders");
+  sheet.addRow(HEADER);
+  sheet.getRow(1).font = { bold: true };
+  sheet.views = [{ state: "frozen", ySplit: 1 }];
+  HEADER.forEach((name, i) => {
+    sheet.getColumn(i + 1).width = WIDE_COLUMNS[name] ?? 12;
+  });
+
+  let currentRow = 2;
 
   for (const order of orders ?? []) {
     const customer = customerById.get(order.customer_id);
@@ -155,7 +186,8 @@ export async function GET(request: Request) {
       customer?.phone ?? "",
       customer?.address ?? "",
       customer?.zone ?? "",
-      packagingSummaryByOrderId.get(order.id) ?? "",
+    ];
+    const statusFields = [
       order.status,
       timestamps.packed ? formatIstDisplay(new Date(timestamps.packed)) : "",
       timestamps.dispatched ? formatIstDisplay(new Date(timestamps.dispatched)) : "",
@@ -173,37 +205,54 @@ export async function GET(request: Request) {
     ];
 
     if (lines.length === 0) {
-      csv += csvRow([...orderFields, "", "", "", "", "", "", "", "", "", ...billFields]);
+      sheet.addRow([...orderFields, "", ...statusFields, "", "", "", "", "", "", "", "", "", ...billFields]);
+      currentRow += 1;
       continue;
     }
 
-    for (const line of lines) {
-      const product = line.product_id ? productById.get(line.product_id) : undefined;
-      const lineAmount =
-        line.actual_qty !== null && line.locked_price_per_unit !== null
-          ? Math.round(line.actual_qty * line.locked_price_per_unit * 100) / 100
-          : "";
-      csv += csvRow([
-        ...orderFields,
-        product?.name ?? "Unknown product",
-        line.ordered_qty ?? "",
-        line.ordered_unit ?? "",
-        line.actual_qty ?? "",
-        product?.unit_label ?? "",
-        line.locked_price_per_unit ?? "",
-        line.line_status,
-        line.is_substitution ? "Yes" : "No",
-        lineAmount,
-        ...billFields,
-      ]);
+    for (const group of groupLinesByPackage(lines)) {
+      const groupStartRow = currentRow;
+      const packagingLabel = group[0].package_id ? (PACKAGING_LABEL[packagingTypeByPackageId.get(group[0].package_id)!] ?? "") : "";
+
+      group.forEach((line, i) => {
+        const product = line.product_id ? productById.get(line.product_id) : undefined;
+        const lineAmount =
+          line.actual_qty !== null && line.locked_price_per_unit !== null
+            ? Math.round(line.actual_qty * line.locked_price_per_unit * 100) / 100
+            : "";
+        sheet.addRow([
+          ...orderFields,
+          i === 0 ? packagingLabel : "",
+          ...statusFields,
+          product?.name ?? "Unknown product",
+          line.ordered_qty ?? "",
+          line.ordered_unit ?? "",
+          line.actual_qty ?? "",
+          product?.unit_label ?? "",
+          line.locked_price_per_unit ?? "",
+          line.line_status,
+          line.is_substitution ? "Yes" : "No",
+          lineAmount,
+          ...billFields,
+        ]);
+        currentRow += 1;
+      });
+
+      const groupEndRow = currentRow - 1;
+      if (groupEndRow > groupStartRow) {
+        sheet.mergeCells(groupStartRow, PACKAGING_COL, groupEndRow, PACKAGING_COL);
+        sheet.getCell(groupStartRow, PACKAGING_COL).alignment = { vertical: "middle" };
+      }
     }
   }
 
-  const filename = from === to ? `orders_${from}.csv` : `orders_${from}_to_${to}.csv`;
+  const buffer = await workbook.xlsx.writeBuffer();
 
-  return new Response(csv, {
+  const filename = from === to ? `orders_${from}.xlsx` : `orders_${from}_to_${to}.xlsx`;
+
+  return new Response(new Uint8Array(buffer), {
     headers: {
-      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       "Content-Disposition": `attachment; filename="${filename}"`,
     },
   });

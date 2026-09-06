@@ -28,7 +28,7 @@ export function OrderExportPanel({ date }: { date: string }) {
         href={href}
         className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[#ECEAE3] px-3 py-1.5 font-sans text-sm font-extrabold text-foreground hover:bg-neutral-bg"
       >
-        <Download className="size-4" aria-hidden="true" /> Download CSV
+        <Download className="size-4" aria-hidden="true" /> Download Excel
       </a>
     </Card>
   );
