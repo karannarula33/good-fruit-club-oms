@@ -5,6 +5,7 @@ export const PACKAGING_TYPES: { value: PackagingType; label: string }[] = [
   { value: "medium_box", label: "Medium Box" },
   { value: "small_box", label: "Small Box" },
   { value: "small_packet", label: "Small Packet" },
+  { value: "medium_packet", label: "Medium Packet" },
   { value: "big_packet", label: "Big Packet" },
   { value: "tiny_box", label: "Tiny Box" },
 ];
@@ -22,6 +23,7 @@ export const PACKAGING_CODE: Record<PackagingType, string> = {
   medium_box: "M",
   small_box: "S",
   small_packet: "SP",
+  medium_packet: "MP",
   big_packet: "BP",
   tiny_box: "T",
 };

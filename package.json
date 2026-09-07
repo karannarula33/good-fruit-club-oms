@@ -15,6 +15,7 @@
     "eval:salutation-classifier": "tsx --env-file=.env.local scripts/eval-salutation-classifier.ts",
     "import:customers": "tsx --env-file=.env.local scripts/import-customers.ts",
     "import:historical-orders": "tsx --env-file=.env.local scripts/import_historical_orders.ts",
+    "sync:orders-to-sheet": "tsx --env-file=.env.local scripts/sync-orders-to-sheet.ts",
     "create:staff-user": "tsx --env-file=.env.local scripts/create-staff-user.ts"
   },
   "dependencies": {
@@ -24,6 +25,7 @@
     "@supabase/supabase-js": "^2.110.9",
     "@vercel/config": "^0.5.5",
     "exceljs": "^4.4.0",
+    "google-auth-library": "^9.15.0",
     "lucide-react": "^1.27.0",
     "motion": "^12.43.0",
     "next": "16.2.12",

@@ -24,7 +24,14 @@ export type OrderStatus =
   | "undelivered"
   | "cancelled";
 export type LineStatus = "pending" | "packed" | "unavailable";
-export type PackagingType = "big_box" | "medium_box" | "small_box" | "small_packet" | "big_packet" | "tiny_box";
+export type PackagingType =
+  | "big_box"
+  | "medium_box"
+  | "small_box"
+  | "small_packet"
+  | "medium_packet"
+  | "big_packet"
+  | "tiny_box";
 export type Salutation = "Sir" | "Ma'am";
 export type PaymentMode = "cod" | "online";
 export type ParseConfidence = "clean" | "flagged";
@@ -709,6 +716,96 @@ export interface Database {
           key?: string;
           value?: number;
           updated_at?: string | null;
+        };
+        Relationships: [];
+      };
+      delivery_pricing_config: {
+        Row: {
+          key: string;
+          value: number;
+          updated_at: string | null;
+        };
+        Insert: {
+          key: string;
+          value: number;
+          updated_at?: string | null;
+        };
+        Update: {
+          key?: string;
+          value?: number;
+          updated_at?: string | null;
+        };
+        Relationships: [];
+      };
+      delivery_pricing_text_config: {
+        Row: {
+          key: string;
+          value: string;
+          updated_at: string | null;
+        };
+        Insert: {
+          key: string;
+          value: string;
+          updated_at?: string | null;
+        };
+        Update: {
+          key?: string;
+          value?: string;
+          updated_at?: string | null;
+        };
+        Relationships: [];
+      };
+      packaging_cost_rates: {
+        Row: {
+          packaging_type: PackagingType;
+          cost_per_unit: number;
+          updated_at: string | null;
+        };
+        Insert: {
+          packaging_type: PackagingType;
+          cost_per_unit: number;
+          updated_at?: string | null;
+        };
+        Update: {
+          packaging_type?: PackagingType;
+          cost_per_unit?: number;
+          updated_at?: string | null;
+        };
+        Relationships: [];
+      };
+      customer_hub_distances: {
+        Row: {
+          customer_id: string;
+          address_snapshot: string;
+          distance_km: number;
+          computed_at: string;
+        };
+        Insert: {
+          customer_id: string;
+          address_snapshot: string;
+          distance_km: number;
+          computed_at?: string;
+        };
+        Update: {
+          customer_id?: string;
+          address_snapshot?: string;
+          distance_km?: number;
+          computed_at?: string;
+        };
+        Relationships: [];
+      };
+      order_sheet_sync: {
+        Row: {
+          order_id: string;
+          synced_at: string;
+        };
+        Insert: {
+          order_id: string;
+          synced_at?: string;
+        };
+        Update: {
+          order_id?: string;
+          synced_at?: string;
         };
         Relationships: [];
       };
