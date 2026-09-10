@@ -15,6 +15,11 @@
     "eval:salutation-classifier": "tsx --env-file=.env.local scripts/eval-salutation-classifier.ts",
     "import:customers": "tsx --env-file=.env.local scripts/import-customers.ts",
     "import:historical-orders": "tsx --env-file=.env.local scripts/import_historical_orders.ts",
+    "merge-duplicate-customer": "tsx --env-file=.env.local scripts/merge_duplicate_customer.ts",
+    "apply-daily-cogs": "tsx --env-file=.env.local scripts/apply_daily_cogs.ts",
+    "apply-daily-delivery-costs": "tsx --env-file=.env.local scripts/apply_daily_delivery_costs.ts",
+    "apply-packaging-costs": "tsx --env-file=.env.local scripts/apply_packaging_costs.ts",
+    "seed-cost-config": "tsx --env-file=.env.local scripts/seed_cost_config.ts",
     "create:staff-user": "tsx --env-file=.env.local scripts/create-staff-user.ts"
   },
   "dependencies": {

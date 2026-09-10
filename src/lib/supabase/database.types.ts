@@ -272,6 +272,9 @@ export interface Database {
           parse_confidence: ParseConfidence | null;
           parse_note: string | null;
           package_id: string | null;
+          actual_packaging_cost: number | null;
+          actual_delivery_cost: number | null;
+          is_gift_box: boolean;
         };
         Insert: {
           id?: string;
@@ -288,6 +291,9 @@ export interface Database {
           parse_confidence?: ParseConfidence | null;
           parse_note?: string | null;
           package_id?: string | null;
+          actual_packaging_cost?: number | null;
+          actual_delivery_cost?: number | null;
+          is_gift_box?: boolean;
         };
         Update: {
           id?: string;
@@ -304,6 +310,9 @@ export interface Database {
           parse_confidence?: ParseConfidence | null;
           parse_note?: string | null;
           package_id?: string | null;
+          actual_packaging_cost?: number | null;
+          actual_delivery_cost?: number | null;
+          is_gift_box?: boolean;
         };
         Relationships: [];
       };
@@ -325,6 +334,135 @@ export interface Database {
           order_id?: string;
           packaging_type?: PackagingType;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      gift_box_contents: {
+        Row: {
+          id: string;
+          order_line_id: string;
+          product_id: string;
+          qty: number;
+          unit_cost: number;
+        };
+        Insert: {
+          id?: string;
+          order_line_id: string;
+          product_id: string;
+          qty: number;
+          unit_cost: number;
+        };
+        Update: {
+          id?: string;
+          order_line_id?: string;
+          product_id?: string;
+          qty?: number;
+          unit_cost?: number;
+        };
+        Relationships: [];
+      };
+      daily_cogs_entries: {
+        Row: {
+          id: string;
+          entry_date: string;
+          product_id: string;
+          cost_per_unit: number;
+          entered_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          entry_date: string;
+          product_id: string;
+          cost_per_unit: number;
+          entered_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          entry_date?: string;
+          product_id?: string;
+          cost_per_unit?: number;
+          entered_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      daily_delivery_hub_costs: {
+        Row: {
+          entry_date: string;
+          hub_cost: number;
+          entered_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          entry_date: string;
+          hub_cost: number;
+          entered_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          entry_date?: string;
+          hub_cost?: number;
+          entered_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      order_delivery_costs: {
+        Row: {
+          order_id: string;
+          delivery_cost: number;
+          entered_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          order_id: string;
+          delivery_cost: number;
+          entered_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          order_id?: string;
+          delivery_cost?: number;
+          entered_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      packaging_cost_config: {
+        Row: {
+          packaging_type: PackagingType;
+          box_cost: number;
+          effective_from: string;
+        };
+        Insert: {
+          packaging_type: PackagingType;
+          box_cost: number;
+          effective_from?: string;
+        };
+        Update: {
+          packaging_type?: PackagingType;
+          box_cost?: number;
+          effective_from?: string;
+        };
+        Relationships: [];
+      };
+      finance_config: {
+        Row: {
+          key: string;
+          value: number;
+          updated_at: string | null;
+        };
+        Insert: {
+          key: string;
+          value: number;
+          updated_at?: string | null;
+        };
+        Update: {
+          key?: string;
+          value?: number;
+          updated_at?: string | null;
         };
         Relationships: [];
       };

@@ -35,15 +35,25 @@ const GO_LIVE_CUTOFF_ISO = "2026-08-06";
 // rows through 18-Aug-26 -- covers the 08-14/08-15/08-18 gap where the app
 // had zero real orders on record (08-15 has none in the sheet either, so
 // that day genuinely had no orders, not a data gap).
-const IMPORT_WINDOW_END_ISO = "2026-08-19";
+// 2026-09-08: bumped 08-19 -> 08-28 for the Master Dashboard export pulled
+// this date, which adds 84 rows through 27-Aug-26 -- the sheet itself has
+// nothing past 27-Aug (the team fully switched to the app after that), so
+// this is the last bump this constant should ever need.
+const IMPORT_WINDOW_END_ISO = "2026-08-28";
 
 // Fruit-column labels that are adjustments, not products -- excluded from
 // order_lines, folded into the order's notes instead.
 const NON_PRODUCT_FRUIT_LABELS = new Set(["Special Discount"]);
 
+// Fixed id from 0023_order_line_costs.sql -- lines resolving to this
+// product (via the "Gift Packing" alias inserted in that same migration)
+// get is_gift_box = true. No per-item breakdown exists for historical
+// rows, so gift_box_contents stays empty for all of them; that's expected.
+const GIFT_BOX_PRODUCT_ID = "9d9766d9-7f1a-4a12-8a79-643f1a4f66e7";
+
 const COL = {
   date: 1, num: 2, customer: 3, phone: 4, address: 5, fruit: 6,
-  qty: 7, size: 8, sellPrice: 9, cogs: 10, notes: 15,
+  qty: 7, size: 8, sellPrice: 9, cogs: 10, pkgCost: 11, delivery: 12, notes: 15,
 } as const;
 
 const MONTHS: Record<string, string> = {
@@ -70,7 +80,7 @@ interface SheetOrder {
   phone: string | null;
   address: string;
   notes: string;
-  lines: { fruit: string; qty: string; size: string; sellPrice: string; cogs: string }[];
+  lines: { fruit: string; qty: string; size: string; sellPrice: string; cogs: string; pkgCost: string; delivery: string }[];
 }
 
 function parseSheet(csvPath: string): { orders: SheetOrder[]; skippedFooterRows: number } {
@@ -134,6 +144,7 @@ function parseSheet(csvPath: string): { orders: SheetOrder[]; skippedFooterRows:
     order.lines.push({
       fruit, qty: (r[COL.qty] ?? "").trim(), size: (r[COL.size] ?? "").trim(),
       sellPrice: (r[COL.sellPrice] ?? "").trim(), cogs: (r[COL.cogs] ?? "").trim(),
+      pkgCost: (r[COL.pkgCost] ?? "").trim(), delivery: (r[COL.delivery] ?? "").trim(),
     });
   }
 
@@ -212,6 +223,34 @@ async function main() {
     "vikash": "61eba6c5-2aa3-4cd2-aac2-fd2c776590fa", // Vikash Bhagchandka
     "punam": "c9a3c723-5b07-4fb7-86e2-b7b84f581deb", // Punam (Central Park 1)
     "kinshuk / konika kumar": "9e0181b0-cadf-4cab-a970-e8e33f152766", // Konika Kumar (son, same household)
+    // 2026-09-09: 2 of the 11 "missing address" holdouts turned out to
+    // already exist, matched by phone+address once the owner supplied
+    // them -- not new customers, just a fuller name than what's on file.
+    "gundeep thakkar": "51d44752-b60d-4c20-bb4c-fac00643ba9d", // Gundeep Thakar (phone/address match)
+    "sanjeev nirvan yadav": "91171d8b-ed9c-4088-a7ac-892cd04e6dc9", // Sanjeev Yadav (phone/address match)
+    "meera g": "a092b264-e1b6-4bbb-b139-fc73bc2fde12", // Meera Gogia (phone/address match)
+    "siddharth": "439b81a1-134b-4266-8309-6e33bfe93d12", // Siddharth Srivastava (phone/address match)
+    // NOTE: phone 9910269303 has TWO customer records already
+    // (2e303289.../"Archana Kakkar" and d33b6a7f.../"Archana Kakar",
+    // typo'd) -- both have real order history, unmerged. Owner confirmed
+    // "Archana Kakkar" by name for this sheet row; mapping there, but the
+    // duplicate itself is still unresolved -- see data-migration-status memory.
+    "archana": "2e303289-36f9-4882-a259-ac0318189127", // Archana Kakkar (phone/name match, owner-confirmed; duplicate merged 2026-09-09)
+    "archana kakar": "2e303289-36f9-4882-a259-ac0318189127", // same -- the sheet's own full-name spelling that originally created the now-merged duplicate; without this alias too, re-running the import recreates it from scratch
+    "archana kakkar": "2e303289-36f9-4882-a259-ac0318189127", // same, exact-name spelling -- one sheet row (21-Jul, order #361) has this name but a malformed "9910269303.0" phone whose normalizePhone() output collides with the stray record's own malformed phone, not the real 10-digit number; override bypasses that phone lookup entirely
+    "sunil saxena": "645e8763-28f8-42d7-b72a-5778910ee270", // Sunil Saxena / S.C. Saxena (exact address match; no phone on file to cross-check)
+    "savita mathur": "0a5adf8e-0923-49ab-9ad5-0dfcd1987624", // sheet typo -- real customer is Savita Malhotra, exact address match (B-201, Belvedere Tower, DLF Phase 2)
+  };
+
+  // 2026-09-09: the other 2 of the 11 "missing address" holdouts are
+  // genuinely new customers (no phone match against the existing
+  // directory) -- the sheet rows themselves never recorded phone/address
+  // for these orders, so the owner supplied them directly.
+  const NEW_CUSTOMER_INFO_OVERRIDES: Record<string, { phone: string; address: string }> = {
+    "ayushi gupta": { phone: "9717886718", address: "K4/4, 3rd Floor, DLF Phase 2" },
+    "anil sriram": { phone: "9350810063", address: "M23B, Adani Samsara, Samrat Mihir Bhoj Rd, Sector 60, Gurugram 122102" },
+    "shweta bharara": { phone: "9811707290", address: "A 20/14 DLF Phase 1" },
+    "raj kumar narang": { phone: "9810902327", address: "D-2/3 DLF Phase 1" },
   };
 
   function customerKeyFor(o: SheetOrder): { key: string; existingId: string | null } {
@@ -235,13 +274,24 @@ async function main() {
     customerKey: string;
     placedAtIso: string;
     notes: string | null;
-    lines: { productId: string; orderedQty: number; orderedUnit: string; lockedPrice: number; lockedCogs: number | null }[];
+    lines: {
+      productId: string; orderedQty: number; orderedUnit: string;
+      lockedPrice: number; lockedCogs: number | null;
+      actualPackagingCost: number | null; actualDeliveryCost: number | null;
+      isGiftBox: boolean;
+    }[];
   }
   const planned: PlannedOrder[] = [];
 
   for (const o of inWindow) {
     const iso = toIso(o.date);
     if (!iso) { skippedOrders.push({ order: o, reason: "unparseable date" }); continue; }
+
+    const infoOverride = NEW_CUSTOMER_INFO_OVERRIDES[o.customer.toLowerCase()];
+    if (infoOverride) {
+      if (!o.phone) o.phone = infoOverride.phone;
+      if (!o.address) o.address = infoOverride.address;
+    }
 
     // Address is only required to CREATE a new customer -- a returning
     // customer already has one on file, and this sheet row may have
@@ -293,10 +343,19 @@ async function main() {
         hadUnresolvedProduct = true;
         continue;
       }
+      // Pkg Cost/Delivery are recorded as absolute per-line rupee amounts
+      // in the sheet (unlike Sell Price/COGS, they don't scale with qty --
+      // confirmed against the Config tab's packaging-by-order-size table
+      // and the per-order delivery-fee formulas), so no division here.
+      const pkgCost = parseFloat(l.pkgCost.replace(/,/g, ""));
+      const deliveryCost = parseFloat(l.delivery.replace(/,/g, ""));
       lines.push({
         productId, orderedQty: qty, orderedUnit: l.size.trim().toLowerCase(),
         lockedPrice: Math.round((totalPrice / qty) * 100) / 100,
         lockedCogs: Number.isFinite(totalCogs) ? Math.round((totalCogs / qty) * 100) / 100 : null,
+        actualPackagingCost: Number.isFinite(pkgCost) ? pkgCost : null,
+        actualDeliveryCost: Number.isFinite(deliveryCost) ? deliveryCost : null,
+        isGiftBox: productId === GIFT_BOX_PRODUCT_ID,
       });
     }
 
@@ -332,8 +391,11 @@ async function main() {
 
   const totalLines = planned.reduce((sum, o) => sum + o.lines.length, 0);
   const linesMissingCogs = planned.reduce((sum, o) => sum + o.lines.filter((l) => l.lockedCogs === null).length, 0);
+  const linesMissingPkg = planned.reduce((sum, o) => sum + o.lines.filter((l) => l.actualPackagingCost === null).length, 0);
+  const linesMissingDelivery = planned.reduce((sum, o) => sum + o.lines.filter((l) => l.actualDeliveryCost === null).length, 0);
+  const giftBoxLines = planned.reduce((sum, o) => sum + o.lines.filter((l) => l.isGiftBox).length, 0);
   const revenue = planned.reduce((sum, o) => sum + o.lines.reduce((s, l) => s + l.orderedQty * l.lockedPrice, 0), 0);
-  console.log(`\nTotal order_lines to insert: ${totalLines} (${linesMissingCogs} with no COGS -> locked_cogs_per_unit null)`);
+  console.log(`\nTotal order_lines to insert: ${totalLines} (${linesMissingCogs} with no COGS, ${linesMissingPkg} with no packaging cost, ${linesMissingDelivery} with no delivery cost, ${giftBoxLines} gift-box lines)`);
   console.log(`Total historical revenue represented: Rs ${revenue.toFixed(2)}`);
 
   if (!execute) {
@@ -357,6 +419,26 @@ async function main() {
       supabase.from("orders").select("id").eq("is_historical", true).range(from, to),
     )
   ).map((o) => o.id);
+
+  // eng_nudge_outcomes.reorder_order_id (Engagement Engine, 0013) can point
+  // at a historical order -- that FK blocks deleting it outright, which
+  // previously stopped this loop mid-chunk (order_lines for that chunk
+  // already gone, orders row still there -- an orphaned, lineless order).
+  // That table is explicitly "auto-derived on later runs by re-reading
+  // orders, no manual entry" (0013's own comment), so clearing stale
+  // references here is expected upkeep, not data loss -- the engine
+  // recomputes them from scratch on its next run.
+  for (let i = 0; i < existingHistoricalIds.length; i += CHUNK) {
+    const chunk = existingHistoricalIds.slice(i, i + CHUNK);
+    const { error: outcomesClearError } = await supabase
+      .from("eng_nudge_outcomes")
+      .update({ reorder_order_id: null })
+      .in("reorder_order_id", chunk);
+    if (outcomesClearError) {
+      throw new Error(`Failed clearing eng_nudge_outcomes references for chunk ${i}: ${outcomesClearError.message}`);
+    }
+  }
+
   for (let i = 0; i < existingHistoricalIds.length; i += CHUNK) {
     const chunk = existingHistoricalIds.slice(i, i + CHUNK);
     const { error: linesDeleteError } = await supabase.from("order_lines").delete().in("order_id", chunk);
@@ -405,6 +487,9 @@ async function main() {
       ordered_unit: l.orderedUnit,
       locked_price_per_unit: l.lockedPrice,
       locked_cogs_per_unit: l.lockedCogs,
+      actual_packaging_cost: l.actualPackagingCost,
+      actual_delivery_cost: l.actualDeliveryCost,
+      is_gift_box: l.isGiftBox,
       actual_qty: l.orderedQty,
       line_status: "packed" as const,
       is_substitution: false,
