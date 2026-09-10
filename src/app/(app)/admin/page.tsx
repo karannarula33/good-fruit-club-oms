@@ -1,9 +1,10 @@
-import { ClipboardList, Truck, Tag, Users, HeartHandshake } from "lucide-react";
+import { ClipboardList, Truck, Tag, Users, HeartHandshake, LayoutDashboard } from "lucide-react";
 import { requireRole } from "@/lib/auth/require-role";
 import { PageHeader } from "@/components/ui/page-header";
 import { Button } from "@/components/ui/button";
 
 const LINKS = [
+  { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/orders", label: "Order Entry", icon: ClipboardList },
   { href: "/admin/procurement", label: "Procurement", icon: Truck },
   { href: "/admin/dispatch", label: "Dispatch", icon: Truck },
