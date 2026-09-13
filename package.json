@@ -20,6 +20,8 @@
     "apply-daily-delivery-costs": "tsx --env-file=.env.local scripts/apply_daily_delivery_costs.ts",
     "apply-packaging-costs": "tsx --env-file=.env.local scripts/apply_packaging_costs.ts",
     "seed-cost-config": "tsx --env-file=.env.local scripts/seed_cost_config.ts",
+    "correct-overlapping-orders": "tsx --env-file=.env.local scripts/correct_overlapping_orders.ts",
+    "reset-order-billing": "tsx --env-file=.env.local scripts/reset_order_billing.ts",
     "create:staff-user": "tsx --env-file=.env.local scripts/create-staff-user.ts"
   },
   "dependencies": {
