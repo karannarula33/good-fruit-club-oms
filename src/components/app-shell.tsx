@@ -49,7 +49,7 @@ export function AppShell({
   return (
     <div className="min-h-dvh flex flex-col bg-background">
       <div className="flex items-center justify-between px-4 py-2.5">
-        <Link href={ROLE_HOME[profile.role]} className="flex items-center gap-2">
+        <Link href={ROLE_HOME[profile.role]} prefetch={false} className="flex items-center gap-2">
           <span className="flex size-8 items-center justify-center rounded-xl bg-foreground font-display text-sm font-extrabold text-white">
             GF
           </span>
@@ -83,6 +83,7 @@ export function AppShell({
             <Link
               key={tab.href}
               href={tab.href}
+              prefetch={false}
               className={cn(
                 "flex flex-col items-center gap-1 px-2 py-1.5 font-sans text-[10.5px] font-bold",
                 many ? "shrink-0 min-w-16" : "flex-1",

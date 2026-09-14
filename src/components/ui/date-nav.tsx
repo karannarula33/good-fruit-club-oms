@@ -17,7 +17,7 @@ export function DateNav({ date, basePath }: { date: string; basePath: string }) 
 
   return (
     <div className="flex items-center gap-2">
-      <Link href={`${basePath}?date=${addDays(date, -1)}`} className="font-sans text-sm font-bold text-muted">
+      <Link href={`${basePath}?date=${addDays(date, -1)}`} prefetch={false} className="font-sans text-sm font-bold text-muted">
         ← Prev
       </Link>
       <Input
@@ -28,11 +28,11 @@ export function DateNav({ date, basePath }: { date: string; basePath: string }) 
         }}
         size="sm"
       />
-      <Link href={`${basePath}?date=${addDays(date, 1)}`} className="font-sans text-sm font-bold text-muted">
+      <Link href={`${basePath}?date=${addDays(date, 1)}`} prefetch={false} className="font-sans text-sm font-bold text-muted">
         Next →
       </Link>
       {date !== today && (
-        <Link href={basePath} className="font-sans text-sm font-bold text-brand">
+        <Link href={basePath} prefetch={false} className="font-sans text-sm font-bold text-brand">
           Today
         </Link>
       )}
