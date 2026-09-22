@@ -153,18 +153,38 @@ function parseSheet(csvPath: string): { orders: SheetOrder[]; skippedFooterRows:
 
 async function main() {
   const execute = process.argv.includes("--execute");
+  // Scoped REBUILD mode: --window-start=YYYY-MM-DD [--window-end=YYYY-MM-DD].
+  // When --window-start is given, this run only clears+reimports orders whose
+  // date is in [window-start, window-end); it deletes ALL orders (historical
+  // AND live) in that window plus their full dependency chain (bills, ledger,
+  // allocations, packages, delivery costs), and disables the app-dedup so the
+  // sheet is loaded as the complete source for the window. Without it, the
+  // original whole-history idempotent re-import behaviour is unchanged.
+  const argOf = (name: string) => {
+    const a = process.argv.find((x) => x.startsWith(`--${name}=`));
+    return a ? a.split("=")[1] : null;
+  };
+  const windowStart = argOf("window-start");
+  const windowEnd = argOf("window-end") ?? IMPORT_WINDOW_END_ISO;
+  const rebuildMode = windowStart !== null;
   const csvArg = process.argv.slice(2).find((a) => !a.startsWith("--"));
   const csvPath = csvArg ?? path.join(__dirname, "..", "Good Fruit Club - Master Dashboard - Orders (1).csv");
 
   console.log(`Mode: ${execute ? "EXECUTE (will write)" : "DRY RUN (no writes)"}`);
+  if (rebuildMode) {
+    console.log(`REBUILD WINDOW: [${windowStart}, ${windowEnd}) -- scoped clear+reimport of ALL orders (historical+live) in range; dedup disabled.`);
+  }
   console.log(`Reading: ${csvPath}\n`);
 
   const { orders: sheetOrders, skippedFooterRows } = parseSheet(csvPath);
   console.log(`Parsed ${sheetOrders.length} orders from the sheet (${skippedFooterRows} footer/summary rows skipped).`);
 
-  const inWindow = sheetOrders.filter((o) => (toIso(o.date) ?? "9999-99-99") < IMPORT_WINDOW_END_ISO);
+  const inWindow = sheetOrders.filter((o) => {
+    const iso = toIso(o.date) ?? "9999-99-99";
+    return iso < windowEnd && (windowStart === null || iso >= windowStart);
+  });
   const afterWindow = sheetOrders.length - inWindow.length;
-  console.log(`${inWindow.length} orders strictly before ${IMPORT_WINDOW_END_ISO}; ${afterWindow} on/after that excluded.\n`);
+  console.log(`${inWindow.length} orders in window [${windowStart ?? "start"}, ${windowEnd}); ${afterWindow} excluded.\n`);
 
   const supabase = createServiceRoleClient();
 
@@ -299,7 +319,7 @@ async function main() {
     const { key, existingId } = customerKeyFor(o);
     if (!existingId && !o.address) { skippedOrders.push({ order: o, reason: "missing address (new customer)" }); continue; }
 
-    if (iso >= GO_LIVE_CUTOFF_ISO) {
+    if (!rebuildMode && iso >= GO_LIVE_CUTOFF_ISO) {
       if (existingId && realOrderCustomerDates.has(`${existingId}__${iso}`)) {
         skippedOrders.push({ order: o, reason: "already captured by a real app order (same customer + day)" });
         continue;
@@ -405,6 +425,60 @@ async function main() {
 
   const CHUNK = 200;
 
+  if (rebuildMode) {
+    // Scoped clear of the window: delete ALL orders (historical + live) whose
+    // delivery_date is in [windowStart, windowEnd), plus their full dependency
+    // chain. Everything outside the window is untouched.
+    console.log(`\nREBUILD: clearing all orders in [${windowStart}, ${windowEnd}) + dependents...`);
+    const winIds = (
+      await fetchAllRows<{ id: string }>((from, to) =>
+        supabase.from("orders").select("id")
+          .gte("delivery_date", windowStart!).lt("delivery_date", windowEnd).range(from, to),
+      )
+    ).map((o) => o.id);
+    console.log(`  ${winIds.length} orders in window to remove`);
+    // Collect credit ledger_entry ids referenced by these orders' allocations
+    // (so the now-orphaned payment credits get removed too).
+    const creditIds = new Set<string>();
+    for (let i = 0; i < winIds.length; i += CHUNK) {
+      const { data } = await supabase.from("payment_allocations").select("ledger_entry_id").in("order_id", winIds.slice(i, i + CHUNK));
+      (data ?? []).forEach((r) => creditIds.add(r.ledger_entry_id));
+    }
+    const del = async (tbl: string, col: string, ids: string[]) => {
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const { error } = await supabase.from(tbl).delete().in(col, ids.slice(i, i + CHUNK));
+        if (error) throw new Error(`REBUILD delete ${tbl}.${col} chunk ${i}: ${error.message}`);
+      }
+    };
+    for (let i = 0; i < winIds.length; i += CHUNK) {
+      const { error } = await supabase.from("eng_nudge_outcomes").update({ reorder_order_id: null }).in("reorder_order_id", winIds.slice(i, i + CHUNK));
+      if (error) throw new Error(`REBUILD clear eng_nudge_outcomes: ${error.message}`);
+    }
+    // Fetch this window's order_line ids -- three tables FK to order_lines.id
+    // (price_overrides 0016, quantity_overrides 0019, gift_box_contents 0023)
+    // and must be cleared before the lines themselves.
+    const lineIds: string[] = [];
+    for (let i = 0; i < winIds.length; i += CHUNK) {
+      const { data } = await supabase.from("order_lines").select("id").in("order_id", winIds.slice(i, i + CHUNK));
+      (data ?? []).forEach((r) => lineIds.push(r.id));
+    }
+    await del("payment_allocations", "order_id", winIds);
+    await del("ledger_entries", "id", [...creditIds]);   // orphaned payment credits
+    await del("ledger_entries", "order_id", winIds);      // bill debits
+    await del("bills", "order_id", winIds);
+    await del("price_overrides", "order_line_id", lineIds);
+    await del("quantity_overrides", "order_line_id", lineIds);
+    await del("gift_box_contents", "order_line_id", lineIds);
+    await del("order_lines", "order_id", winIds);         // before packages: order_lines.package_id -> order_packages
+    await del("order_packages", "order_id", winIds);
+    await del("order_delivery_costs", "order_id", winIds);
+    await del("orders", "id", winIds);
+    console.log(`  removed ${winIds.length} orders (+ ${creditIds.size} payment credits) and all dependents in window`);
+    // fall through to customer + order insert below
+    const existingHistoricalIds: string[] = [];
+    void existingHistoricalIds;
+  } else {
+
   console.log("\nDeleting any existing is_historical rows (idempotent re-import)...");
   // Paginated select (existingHistorical can exceed PostgREST's 1000-row
   // page cap) and CHUNKed, error-checked deletes -- a single .in() with
@@ -449,6 +523,8 @@ async function main() {
   if (existingHistoricalIds.length > 0) {
     console.log(`  removed ${existingHistoricalIds.length} previously-imported historical orders`);
   }
+
+  } // end non-rebuild delete branch
 
   if (newCustomers.length > 0) {
     const { data: inserted, error } = await supabase

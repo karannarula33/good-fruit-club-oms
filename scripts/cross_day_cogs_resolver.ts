@@ -81,7 +81,16 @@ async function main() {
   };
 
   // ---- Step 2: resolve uncosted live lines ----
-  const { data: orders } = await sb.from("orders").select("id, delivery_date").eq("is_historical", false);
+  // Fill both live and historical orders (historical sheet orders may lack COGS
+  // where the sheet had none, e.g. the rebuilt Aug 4-26 range).
+  // Paginate -- there are >1000 orders, past PostgREST's default page cap.
+  const orders: { id: string; delivery_date: string }[] = [];
+  for (let from = 0; ; from += 1000) {
+    const { data } = await sb.from("orders").select("id, delivery_date").range(from, from + 999);
+    if (!data || data.length === 0) break;
+    orders.push(...data);
+    if (data.length < 1000) break;
+  }
   const dateByOrder = new Map((orders ?? []).map((o) => [o.id, o.delivery_date]));
   const orderIds = (orders ?? []).map((o) => o.id);
   let uncosted: any[] = [];
