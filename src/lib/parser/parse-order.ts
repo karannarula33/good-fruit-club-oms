@@ -233,28 +233,40 @@ export async function parseOrderBatchPaste(
 ): Promise<ParsedOrderBatchEntry[]> {
   const client = new Anthropic();
 
-  const response = await client.messages.create({
-    model: "claude-sonnet-5",
-    max_tokens: 8192,
-    thinking: { type: "disabled" },
-    system: ORDER_BATCH_PARSER_SYSTEM_PROMPT,
-    output_config: {
-      format: { type: "json_schema", schema: ORDER_BATCH_SCHEMA },
-    },
-    messages: [
-      {
-        role: "user",
-        content: buildOrderBatchParserUserMessage({
-          catalogBlock: buildCatalogBlock(catalog),
-          customerBlock: buildCustomerBlock(customers),
-          rawText,
-        }),
+  // Streamed so the large max_tokens below doesn't hit the SDK's non-streaming
+  // HTTP timeout. The batch output is UUID-heavy (a product_id per line + a
+  // matched_id per order), so it tokenizes densely; 8192 truncated on large
+  // multi-customer pastes, producing invalid JSON at parse time.
+  const response = await client.messages
+    .stream({
+      model: "claude-sonnet-5",
+      max_tokens: 32000,
+      thinking: { type: "disabled" },
+      system: ORDER_BATCH_PARSER_SYSTEM_PROMPT,
+      output_config: {
+        format: { type: "json_schema", schema: ORDER_BATCH_SCHEMA },
       },
-    ],
-  });
+      messages: [
+        {
+          role: "user",
+          content: buildOrderBatchParserUserMessage({
+            catalogBlock: buildCatalogBlock(catalog),
+            customerBlock: buildCustomerBlock(customers),
+            rawText,
+          }),
+        },
+      ],
+    })
+    .finalMessage();
 
   if (response.stop_reason === "refusal") {
     throw new Error("Order parser request was refused");
+  }
+  if (response.stop_reason === "max_tokens") {
+    throw new Error(
+      "Order parser response was cut off before it finished (hit the output token limit). " +
+        "The paste likely contains too many orders at once — split it into smaller batches and try again.",
+    );
   }
 
   const textBlock = response.content.find(
@@ -277,7 +289,7 @@ export async function parseOrderPaste(
 
   const response = await client.messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 4096,
+    max_tokens: 16000,
     thinking: { type: "disabled" },
     system: ORDER_PARSER_SYSTEM_PROMPT,
     output_config: {
@@ -297,6 +309,12 @@ export async function parseOrderPaste(
 
   if (response.stop_reason === "refusal") {
     throw new Error("Order parser request was refused");
+  }
+  if (response.stop_reason === "max_tokens") {
+    throw new Error(
+      "Order parser response was cut off before it finished (hit the output token limit). " +
+        "Try a shorter paste.",
+    );
   }
 
   const textBlock = response.content.find(
