@@ -46,3 +46,6 @@ next-env.d.ts
 
 # Vendor COGS slips + derived JSON (business data, kept local)
 COGS/
+
+# Delivery: Mover charge sheet exports + WhatsApp customer-location chat (business data, kept local)
+Delivery/
