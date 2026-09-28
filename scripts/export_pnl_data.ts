@@ -38,15 +38,20 @@ function istDate(iso: string | null): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 }
 
-async function fetchAll<T>(run: (from: number, to: number) => Promise<{ data: T[] | null; error: { message: string } | null }>): Promise<T[]> {
+// `run` returns a Supabase query builder (a thenable). Its resolved `data` is
+// typed `unknown` here so callers can select columns not yet in the generated
+// database.types.ts (e.g. actual_labour_cost, added in migration 0025 but not
+// regenerated -- no Supabase CLI in this environment); we cast to T[] inside.
+async function fetchAll<T>(run: (from: number, to: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
   const out: T[] = [];
   let from = 0;
   for (;;) {
     const { data, error } = await run(from, from + 999);
     if (error) throw new Error(error.message);
-    if (!data || !data.length) break;
-    out.push(...data);
-    if (data.length < 1000) break;
+    const rows = (data as T[] | null) ?? [];
+    if (!rows.length) break;
+    out.push(...rows);
+    if (rows.length < 1000) break;
     from += 1000;
   }
   return out;
