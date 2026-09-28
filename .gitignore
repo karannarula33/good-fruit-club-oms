@@ -49,3 +49,6 @@ COGS/
 
 # Delivery: Mover charge sheet exports + WhatsApp customer-location chat (business data, kept local)
 Delivery/
+
+# Packaging: per-order packing sheets (business data, kept local)
+Packaging/

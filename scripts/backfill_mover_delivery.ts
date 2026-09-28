@@ -173,7 +173,14 @@ async function main() {
     if (ws.name.toLowerCase().includes("payment")) return;
     const date = tabToDate(ws.name);
     if (!date) return;
-    const header = (ws.getRow(1).values as any[]).map(cell);
+    // Header isn't always row 1 (e.g. the 8th Aug tab has base-location metadata
+    // in rows 1-3). Find the row that actually carries the column labels.
+    let headerRow = 1;
+    for (let hr = 1; hr <= 6 && hr <= ws.rowCount; hr++) {
+      const hv = (ws.getRow(hr).values as any[]).map(cell);
+      if (hv.some((h) => h && h.toLowerCase().includes("total delivery cost"))) { headerRow = hr; break; }
+    }
+    const header = (ws.getRow(headerRow).values as any[]).map(cell);
     const find = (pred: (h: string) => boolean) => header.findIndex((h) => h && pred(h.toLowerCase()));
     const nameCol = find((h) => h.includes("customer name"));
     const plusCol = find((h) => h.includes("plus code"));
@@ -183,7 +190,7 @@ async function main() {
     const weightCol = find((h) => h.includes("weight"));
     const codCol = find((h) => h.includes("cod amount") || h.includes("cash collected") || h.includes("order amount"));
     if (costCol < 0) return;
-    for (let r = 2; r <= ws.rowCount; r++) {
+    for (let r = headerRow + 1; r <= ws.rowCount; r++) {
       const v = (ws.getRow(r).values as any[]).map(cell);
       const costRaw = v[costCol] ?? "";
       if (!costRaw || isNaN(Number(costRaw))) continue;
@@ -211,8 +218,11 @@ async function main() {
   const manualPath = join(OUT_DIR, "_manual_matches.json");
   const manual = new Map<string, string>();
   if (existsSync(manualPath)) {
-    for (const m of JSON.parse(readFileSync(manualPath, "utf-8")) as any[])
+    for (const m of JSON.parse(readFileSync(manualPath, "utf-8")) as any[]) {
       manual.set(`${m.date}|${m.orderNum}|${m.plus}`, m.customer);
+      // A plus code you confirmed on one day helps resolve it on every other day.
+      addToDict(dict, m.plus, m.customer);
+    }
   }
   const manualWarn: { date: string; customer: string }[] = [];
 

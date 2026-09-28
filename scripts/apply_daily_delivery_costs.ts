@@ -45,6 +45,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 
 async function main() {
   const execute = process.argv.includes("--execute");
+  const reset = process.argv.includes("--reset");
   const [entryDate, hubCostRaw, jsonPath] = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const hubCost = Number(hubCostRaw);
   if (!entryDate || !/^\d{4}-\d{2}-\d{2}$/.test(entryDate) || !Number.isFinite(hubCost) || hubCost < 0 || !jsonPath) {
@@ -74,6 +75,18 @@ async function main() {
     customers: { display_name: string };
     order_lines: Line[];
   }[];
+
+  // --reset: clear this date's previously-applied delivery costs so the day can
+  // be re-applied at a corrected hub rate (apply otherwise only fills nulls).
+  if (reset && execute) {
+    const orderIds = orders.map((o) => o.id);
+    const lineIds = orders.flatMap((o) => o.order_lines.map((l) => l.id));
+    if (lineIds.length) await supabase.from("order_lines").update({ actual_delivery_cost: null }).in("id", lineIds);
+    if (orderIds.length) await supabase.from("order_delivery_costs").delete().in("order_id", orderIds);
+    await supabase.from("daily_delivery_hub_costs").delete().eq("entry_date", entryDate);
+    orders.forEach((o) => o.order_lines.forEach((l) => (l.actual_delivery_cost = null)));
+    console.log(`Reset: cleared prior delivery costs for ${entryDate} (${lineIds.length} lines).`);
+  }
 
   const soldLines = (o: (typeof orders)[number]) =>
     o.order_lines.filter((l) => l.line_status !== "unavailable" && (l.actual_qty ?? 0) > 0);
