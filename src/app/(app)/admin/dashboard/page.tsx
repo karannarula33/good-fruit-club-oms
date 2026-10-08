@@ -224,6 +224,16 @@ export default async function DashboardPage({
         </div>
       </Section>
 
+      <Section title="Replacements and free items" note="Items charged ₹1 or less. Most are free replacements for poor-quality items, and the original usually isn't collected back, so their cost is already inside COGS and the margins above. Atta samples and gift cards or diyas are counted as free extras.">
+        <div className={grid}>
+          {t("Replacement items", "replacementCount", "count", "down", String(cur.replacementCount), `${cur.replacementOrders} order${cur.replacementOrders === 1 ? "" : "s"}`)}
+          {t("Orders with a replacement", "replacementOrderShare", "pct", "down", pctText(cur.replacementOrderShare))}
+          {t("Replacement cost", "replacementCost", "money", "down", rupees(cur.replacementCost))}
+          {t("Replacement cost % of revenue", "replacementCostPct", "pct", "down", pctText(cur.replacementCostPct, 2))}
+          {t("Free extras", "freebieCost", "money", "none", rupees(cur.freebieCost), `${cur.freebieCount} item${cur.freebieCount === 1 ? "" : "s"}: atta samples, gift cards, diyas`)}
+        </div>
+      </Section>
+
       {b.daily.length > 1 && (
         <Card elevated>
           <p className="font-sans text-sm font-bold text-foreground px-1 pt-1">Revenue &amp; gross margin by day</p>
@@ -344,7 +354,17 @@ export default async function DashboardPage({
             />
           </Card>
           <Card>
+            <p className="font-sans text-sm font-bold text-foreground px-2 pt-1">Given free ({b.freeItems.length})</p>
+            <Table
+              head={["Date", "Product", "Member", "Qty", "Cost", "Type"]}
+              align={["l", "l", "l", "r", "r", "l"]}
+              rows={b.freeItems.slice(0, 30).map((x) => [shortDate(x.date), x.product, x.customer, num(x.qty, 2), rupees(x.cost), x.kind === "replacement" ? "Replacement" : "Free extra"])}
+              empty="Nothing given free in this range."
+            />
+          </Card>
+          <Card>
             <p className="font-sans text-sm font-bold text-foreground px-2 pt-1">Sold at or below cost ({b.priceExceptions.length})</p>
+            <p className="font-sans text-xs text-muted px-2">Charged items only; free replacements are listed separately.</p>
             <Table
               head={["Date", "Product", "Member", "Price", "COGS"]}
               align={["l", "l", "l", "r", "r"]}

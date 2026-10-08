@@ -148,3 +148,31 @@ describe("breakdowns", () => {
     expect(b.memberStatus.find((m) => m.status === "Cooling")!.members).toBe(1);
   });
 });
+
+describe("free replacements", () => {
+  const snap: Snapshot = {
+    orders: [
+      order("o1", "c1", "2026-09-01", [line({ price: 500, cogsPerUnit: 300 }), line({ price: 0, cogsPerUnit: 120, actualQty: 2 })]),
+      order("o2", "c2", "2026-09-02", [line({ productId: "atta", price: 0.01, cogsPerUnit: 110, actualQty: 0.3 })]),
+      order("o3", "c2", "2026-09-03", [line({ price: 50, cogsPerUnit: 60 })]),
+    ],
+    customers: [{ id: "c1", name: "Asha", zone: null, isInternal: false }, { id: "c2", name: "Bina", zone: null, isInternal: false }],
+    products: [{ id: "p1", name: "Papaya", category: null }, { id: "atta", name: "Good staples Atta", category: null }],
+    overheads: [],
+  };
+  it("counts replacements and free extras separately and keeps their cost in COGS", () => {
+    const s = summarize(snap, { from: "2026-09-01", to: "2026-09-30" });
+    expect(s.replacementCount).toBe(1);
+    expect(s.replacementOrders).toBe(1);
+    expect(s.replacementCost).toBe(240);
+    expect(s.replacementOrderShare).toBeCloseTo(100 / 3);
+    expect(s.freebieCount).toBe(1);
+    expect(s.freebieCost).toBe(33);
+    expect(s.cogs).toBe(300 + 240 + 33 + 60);
+  });
+  it("lists free items apart from charged below-cost sales", () => {
+    const b = breakdowns(snap, { from: "2026-09-01", to: "2026-09-30" });
+    expect(b.freeItems.map((f) => f.kind).sort()).toEqual(["freebie", "replacement"]);
+    expect(b.priceExceptions.map((p) => p.date)).toEqual(["2026-09-03"]);
+  });
+});

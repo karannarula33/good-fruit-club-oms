@@ -118,6 +118,18 @@ export function isSold(l: MLine): boolean {
   return (l.actualQty ?? 0) > 0 && l.lineStatus !== "unavailable";
 }
 
+// A sold line charged ₹1 or less was given free. Admin, 2026-10-08: these are
+// mostly replacements for a poor-quality item (the original usually isn't
+// collected back, so both items' cost is real). Atta samples and festive
+// gift cards/diyas are free extras, counted separately.
+export const FREE_PRICE_MAX = 1;
+const FREEBIE_NAMES = /atta|gift card|gift diya/i;
+export type FreeKind = "replacement" | "freebie";
+export function freeKind(l: MLine, productName: string): FreeKind | null {
+  if (!isSold(l) || l.price === null || l.price > FREE_PRICE_MAX) return null;
+  return FREEBIE_NAMES.test(productName) ? "freebie" : "replacement";
+}
+
 export interface OrderEconomics {
   revenue: number;
   cogs: number;
@@ -194,6 +206,13 @@ export interface Summary {
   lowOrderDays: number;
   unavailableRate: number | null;
   substitutionRate: number | null;
+  replacementCount: number;
+  replacementOrders: number;
+  replacementCost: number;
+  replacementOrderShare: number | null;
+  replacementCostPct: number | null;
+  freebieCount: number;
+  freebieCost: number;
   activeMembers: number;
   newMembers: number;
   reactivatedMembers: number;
@@ -240,6 +259,9 @@ export function summarize(snap: Snapshot, range: DateRange): Summary {
   let revenue = 0, cogs = 0, packaging = 0, delivery = 0, labour = 0, soldLines = 0, allLines = 0;
   let single = 0, under500 = 0, giftBulk = 0;
   let unavailable = 0, substitutions = 0;
+  let replacementCount = 0, replacementCost = 0, freebieCount = 0, freebieCost = 0;
+  const replacementOrderIds = new Set<string>();
+  const nameOf = new Map(snap.products.map((p) => [p.id, p.name]));
   let soldCount = 0, cogsCosted = 0, packCosted = 0, delCosted = 0, labCosted = 0;
   const ordersPerDay = new Map<string, number>();
   const revenueByMember = new Map<string, number>();
@@ -256,6 +278,10 @@ export function summarize(snap: Snapshot, range: DateRange): Summary {
     for (const l of o.lines) {
       if (l.lineStatus === "unavailable") unavailable++;
       if (l.isSubstitution) substitutions++;
+      const free = freeKind(l, (l.productId && nameOf.get(l.productId)) || "");
+      const freeCost = (l.actualQty ?? 0) * (l.cogsPerUnit ?? 0);
+      if (free === "replacement") { replacementCount++; replacementCost += freeCost; replacementOrderIds.add(o.id); }
+      if (free === "freebie") { freebieCount++; freebieCost += freeCost; }
       if (!isSold(l)) continue;
       soldCount++;
       if (l.cogsPerUnit !== null) cogsCosted++;
@@ -342,6 +368,13 @@ export function summarize(snap: Snapshot, range: DateRange): Summary {
     lowOrderDays: [...ordersPerDay.values()].filter((n) => n < LOW_ORDER_DAY_THRESHOLD).length,
     unavailableRate: pct(unavailable, allLines),
     substitutionRate: pct(substitutions, allLines),
+    replacementCount,
+    replacementOrders: replacementOrderIds.size,
+    replacementCost: roundToCents(replacementCost),
+    replacementOrderShare: pct(replacementOrderIds.size, orders),
+    replacementCostPct: pct(replacementCost, revenue),
+    freebieCount,
+    freebieCost: roundToCents(freebieCost),
     activeMembers,
     newMembers,
     reactivatedMembers: reactivated,
@@ -373,6 +406,7 @@ export interface ProductRow {
 export interface CategoryRow { category: string; revenue: number; share: number | null; grossMarginPct: number | null }
 export interface CogsMove { id: string; name: string; lastWeek: number; thisWeek: number; changePct: number }
 export interface PriceException { date: string; product: string; customer: string; price: number; cogs: number }
+export interface FreeItem { date: string; product: string; customer: string; qty: number; cost: number; kind: FreeKind }
 export interface Pairing { a: string; b: string; orders: number }
 export interface StatusRow { status: string; orders: number }
 export interface ZoneRow {
@@ -393,6 +427,7 @@ export interface Breakdowns {
   lowMarginProducts: ProductRow[];
   cogsMoves: CogsMove[];
   priceExceptions: PriceException[];
+  freeItems: FreeItem[];
   pairings: Pairing[];
   unavailableByProduct: { name: string; count: number }[];
   statusMix: StatusRow[];
@@ -450,6 +485,7 @@ export function breakdowns(snap: Snapshot, range: DateRange): Breakdowns {
   const pairCounts = new Map<string, number>();
   const unavailable = new Map<string, number>();
   const priceExceptions: PriceException[] = [];
+  const freeItems: FreeItem[] = [];
   for (const o of inRange) {
     const soldIds = new Set<string>();
     for (const l of o.lines) {
@@ -469,7 +505,10 @@ export function breakdowns(snap: Snapshot, range: DateRange): Breakdowns {
         if (l.price !== null) row.revenue += roundLineAmount(l.actualQty!, l.price);
         if (l.cogsPerUnit !== null) { row.cogs += (l.actualQty ?? 0) * l.cogsPerUnit; row.costedSold++; }
         soldIds.add(id);
-        if (l.price !== null && l.cogsPerUnit !== null && l.price <= l.cogsPerUnit && !l.isGiftBox) {
+        const free = freeKind(l, row.name);
+        if (free) {
+          freeItems.push({ date: o.deliveryDate, product: row.name, customer: customerById.get(o.customerId)?.name ?? "Unknown", qty: l.actualQty ?? 0, cost: roundToCents((l.actualQty ?? 0) * (l.cogsPerUnit ?? 0)), kind: free });
+        } else if (l.price !== null && l.cogsPerUnit !== null && l.price <= l.cogsPerUnit && !l.isGiftBox) {
           priceExceptions.push({ date: o.deliveryDate, product: row.name, customer: customerById.get(o.customerId)?.name ?? "Unknown", price: l.price, cogs: l.cogsPerUnit });
         }
       }
@@ -622,6 +661,7 @@ export function breakdowns(snap: Snapshot, range: DateRange): Breakdowns {
     lowMarginProducts,
     cogsMoves,
     priceExceptions: priceExceptions.sort((a, b) => b.date.localeCompare(a.date)),
+    freeItems: freeItems.sort((a, b) => b.date.localeCompare(a.date)),
     pairings,
     unavailableByProduct: [...unavailable.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     statusMix,
