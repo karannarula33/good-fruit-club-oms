@@ -24,6 +24,7 @@ export type OrderStatus =
   | "undelivered"
   | "cancelled";
 export type LineStatus = "pending" | "packed" | "unavailable";
+export type OverheadCategory = "ads" | "day_level" | "other";
 export type PackagingType = "big_box" | "medium_box" | "small_box" | "small_packet" | "big_packet" | "tiny_box";
 export type Salutation = "Sir" | "Ma'am";
 export type PaymentMode = "cod" | "online";
@@ -69,6 +70,7 @@ export interface Database {
           unit_label: string | null;
           active: boolean;
           created_at: string;
+          category: string | null;
         };
         Insert: {
           id?: string;
@@ -77,6 +79,7 @@ export interface Database {
           unit_label?: string | null;
           active?: boolean;
           created_at?: string;
+          category?: string | null;
         };
         Update: {
           id?: string;
@@ -85,6 +88,7 @@ export interface Database {
           unit_label?: string | null;
           active?: boolean;
           created_at?: string;
+          category?: string | null;
         };
         Relationships: [];
       };
@@ -186,6 +190,7 @@ export interface Database {
           created_at: string;
           salutation: Salutation | null;
           payment_mode: PaymentMode;
+          is_internal: boolean;
         };
         Insert: {
           id?: string;
@@ -197,6 +202,7 @@ export interface Database {
           created_at?: string;
           salutation?: Salutation | null;
           payment_mode?: PaymentMode;
+          is_internal?: boolean;
         };
         Update: {
           id?: string;
@@ -208,6 +214,7 @@ export interface Database {
           created_at?: string;
           salutation?: Salutation | null;
           payment_mode?: PaymentMode;
+          is_internal?: boolean;
         };
         Relationships: [];
       };
@@ -275,6 +282,7 @@ export interface Database {
           actual_packaging_cost: number | null;
           actual_delivery_cost: number | null;
           is_gift_box: boolean;
+          actual_labour_cost: number | null;
         };
         Insert: {
           id?: string;
@@ -294,6 +302,7 @@ export interface Database {
           actual_packaging_cost?: number | null;
           actual_delivery_cost?: number | null;
           is_gift_box?: boolean;
+          actual_labour_cost?: number | null;
         };
         Update: {
           id?: string;
@@ -313,6 +322,7 @@ export interface Database {
           actual_packaging_cost?: number | null;
           actual_delivery_cost?: number | null;
           is_gift_box?: boolean;
+          actual_labour_cost?: number | null;
         };
         Relationships: [];
       };
@@ -445,6 +455,36 @@ export interface Database {
           packaging_type?: PackagingType;
           box_cost?: number;
           effective_from?: string;
+        };
+        Relationships: [];
+      };
+      overhead_entries: {
+        Row: {
+          id: string;
+          entry_date: string;
+          category: OverheadCategory;
+          amount: number;
+          note: string | null;
+          entered_by: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          entry_date: string;
+          category: OverheadCategory;
+          amount: number;
+          note?: string | null;
+          entered_by?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          entry_date?: string;
+          category?: OverheadCategory;
+          amount?: number;
+          note?: string | null;
+          entered_by?: string | null;
+          created_at?: string;
         };
         Relationships: [];
       };
