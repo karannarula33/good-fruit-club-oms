@@ -11,8 +11,10 @@ import {
   BULK_ORDER_LIMIT, COGS_MOVE_PCT, LOW_MARGIN_PCT, LOW_ORDER_DAY_THRESHOLD, SMALL_ORDER_LIMIT,
   type DateRange, type RangeView, type Summary,
 } from "@/lib/dashboard/metrics";
+import { dailyInsights, type Insight, type InsightTone } from "@/lib/dashboard/insights";
 import { TrendChart } from "./trend-chart";
 import { RangeControls } from "./range-controls";
+import { AutoRefresh } from "./auto-refresh";
 
 // ---------- formatting ----------
 
@@ -116,6 +118,31 @@ function Table({ head, rows, empty = "Nothing in this range.", align }: { head: 
 
 const grid = "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3";
 
+const TONE: Record<InsightTone, { label: string; bar: string; chip: string }> = {
+  act: { label: "Do today", bar: "bg-danger", chip: "bg-danger-bg text-danger-text" },
+  watch: { label: "Watch", bar: "bg-warning", chip: "bg-warning-bg text-warning-text" },
+  good: { label: "Good", bar: "bg-success", chip: "bg-success-bg text-success-text" },
+  info: { label: "FYI", bar: "bg-info", chip: "bg-info-bg text-info-text" },
+};
+
+function InsightRow({ insight }: { insight: Insight }) {
+  const tone = TONE[insight.tone];
+  const body = (
+    <div className="flex gap-3 py-2.5">
+      <span aria-hidden className={cn("w-1 shrink-0 rounded-full", tone.bar)} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className={cn("rounded-full px-2 py-0.5 font-sans text-[10px] font-bold uppercase tracking-wide", tone.chip)}>{tone.label}</span>
+          <p className="font-sans text-sm font-semibold text-foreground">{insight.title}</p>
+        </div>
+        {insight.detail && <p className="mt-0.5 font-sans text-xs text-muted">{insight.detail}</p>}
+        {insight.href && <p className="mt-0.5 font-sans text-xs font-semibold text-brand">Open →</p>}
+      </div>
+    </div>
+  );
+  return insight.href ? <Link href={insight.href} prefetch={false} className="block">{body}</Link> : body;
+}
+
 // ---------- page ----------
 
 export default async function DashboardPage({
@@ -141,6 +168,12 @@ export default async function DashboardPage({
   const cur = summarize(snap, current);
   const prev = summarize(snap, previous);
   const b = breakdowns(snap, current);
+
+  // Insights explain one day: the selected day, or the last day of the range
+  // (never past today).
+  const insightDay = view === "day" ? anchor : current.to > today ? today : current.to;
+  const insights = dailyInsights(snap, insightDay, today);
+  const renderedAt = new Date().toISOString();
 
   const t = (label: string, key: keyof Summary, kind: Kind, better: Better, value: string, hint?: string) => (
     <Tile key={label} label={label} value={value} cur={cur[key] as number | null} prev={prev[key] as number | null} kind={kind} better={better} hint={hint} />
@@ -173,6 +206,22 @@ export default async function DashboardPage({
           {!snap.schemaReady && <>Run migration 0032 in Supabase to turn on product categories, the internal-account flag and overheads.</>}
         </div>
       )}
+
+      <Section
+        title={`Insights · ${longDate(insightDay)}`}
+        note={view === "day" ? "What stands out on this delivery day against the last 4 weeks." : "For the last day of the selected range. Pick Day to see insights for any other day."}
+      >
+        <Card>
+          <div className="divide-y divide-neutral-bg px-1">
+            {insights.length > 0
+              ? insights.map((i) => <InsightRow key={i.id} insight={i} />)
+              : <p className="py-3 font-sans text-sm text-muted">Nothing unusual on this day.</p>}
+          </div>
+          <div className="px-1 pt-1">
+            <AutoRefresh renderedAt={renderedAt} />
+          </div>
+        </Card>
+      </Section>
 
       <Section title="Headline">
         <div className={grid}>
