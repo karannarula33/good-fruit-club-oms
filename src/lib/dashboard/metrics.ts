@@ -118,16 +118,24 @@ export function isSold(l: MLine): boolean {
   return (l.actualQty ?? 0) > 0 && l.lineStatus !== "unavailable";
 }
 
-// A sold line charged ₹1 or less was given free. Admin, 2026-10-08: these are
-// mostly replacements for a poor-quality item (the original usually isn't
-// collected back, so both items' cost is real). Atta samples and festive
-// gift cards/diyas are free extras, counted separately.
-export const FREE_PRICE_MAX = 1;
+// A sold line charged under ₹1 (₹0, or a few paise) was given free. Admin,
+// 2026-10-08: these are mostly replacements for a poor-quality item (the
+// original usually isn't collected back, so both items' cost is real). Atta
+// samples and festive gift cards/diyas are free extras, counted separately.
+//
+// Exactly ₹1 is NOT treated as free: custom items have been billed at a ₹1
+// placeholder by mistake (a ₹2,984 gift box went out at ₹1), so ₹1 lines are
+// listed for the admin to check instead.
+export const FREE_PRICE_BELOW = 1;
+export const PLACEHOLDER_PRICE = 1;
 const FREEBIE_NAMES = /atta|gift card|gift diya/i;
 export type FreeKind = "replacement" | "freebie";
 export function freeKind(l: MLine, productName: string): FreeKind | null {
-  if (!isSold(l) || l.price === null || l.price > FREE_PRICE_MAX) return null;
+  if (!isSold(l) || l.price === null || l.price >= FREE_PRICE_BELOW) return null;
   return FREEBIE_NAMES.test(productName) ? "freebie" : "replacement";
+}
+export function isPlaceholderPrice(l: MLine, productName: string): boolean {
+  return isSold(l) && l.price === PLACEHOLDER_PRICE && !FREEBIE_NAMES.test(productName);
 }
 
 export interface OrderEconomics {
@@ -428,6 +436,7 @@ export interface Breakdowns {
   cogsMoves: CogsMove[];
   priceExceptions: PriceException[];
   freeItems: FreeItem[];
+  placeholderPrices: PriceException[];
   pairings: Pairing[];
   unavailableByProduct: { name: string; count: number }[];
   statusMix: StatusRow[];
@@ -486,6 +495,7 @@ export function breakdowns(snap: Snapshot, range: DateRange): Breakdowns {
   const unavailable = new Map<string, number>();
   const priceExceptions: PriceException[] = [];
   const freeItems: FreeItem[] = [];
+  const placeholderPrices: PriceException[] = [];
   for (const o of inRange) {
     const soldIds = new Set<string>();
     for (const l of o.lines) {
@@ -506,7 +516,9 @@ export function breakdowns(snap: Snapshot, range: DateRange): Breakdowns {
         if (l.cogsPerUnit !== null) { row.cogs += (l.actualQty ?? 0) * l.cogsPerUnit; row.costedSold++; }
         soldIds.add(id);
         const free = freeKind(l, row.name);
-        if (free) {
+        if (isPlaceholderPrice(l, row.name)) {
+          placeholderPrices.push({ date: o.deliveryDate, product: row.name, customer: customerById.get(o.customerId)?.name ?? "Unknown", price: l.price!, cogs: l.cogsPerUnit ?? 0 });
+        } else if (free) {
           freeItems.push({ date: o.deliveryDate, product: row.name, customer: customerById.get(o.customerId)?.name ?? "Unknown", qty: l.actualQty ?? 0, cost: roundToCents((l.actualQty ?? 0) * (l.cogsPerUnit ?? 0)), kind: free });
         } else if (l.price !== null && l.cogsPerUnit !== null && l.price <= l.cogsPerUnit && !l.isGiftBox) {
           priceExceptions.push({ date: o.deliveryDate, product: row.name, customer: customerById.get(o.customerId)?.name ?? "Unknown", price: l.price, cogs: l.cogsPerUnit });
@@ -662,6 +674,7 @@ export function breakdowns(snap: Snapshot, range: DateRange): Breakdowns {
     cogsMoves,
     priceExceptions: priceExceptions.sort((a, b) => b.date.localeCompare(a.date)),
     freeItems: freeItems.sort((a, b) => b.date.localeCompare(a.date)),
+    placeholderPrices: placeholderPrices.sort((a, b) => b.date.localeCompare(a.date)),
     pairings,
     unavailableByProduct: [...unavailable.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
     statusMix,

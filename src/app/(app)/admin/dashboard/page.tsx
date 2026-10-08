@@ -224,7 +224,7 @@ export default async function DashboardPage({
         </div>
       </Section>
 
-      <Section title="Replacements and free items" note="Items charged ₹1 or less. Most are free replacements for poor-quality items, and the original usually isn't collected back, so their cost is already inside COGS and the margins above. Atta samples and gift cards or diyas are counted as free extras.">
+      <Section title="Replacements and free items" note="Items charged under ₹1 (₹0 or a few paise). Most are free replacements for poor-quality items, and the original usually isn't collected back, so their cost is already inside COGS and the margins above. Atta samples and gift cards or diyas are counted as free extras.">
         <div className={grid}>
           {t("Replacement items", "replacementCount", "count", "down", String(cur.replacementCount), `${cur.replacementOrders} order${cur.replacementOrders === 1 ? "" : "s"}`)}
           {t("Orders with a replacement", "replacementOrderShare", "pct", "down", pctText(cur.replacementOrderShare))}
@@ -353,6 +353,17 @@ export default async function DashboardPage({
               empty="Not enough cost data in both weeks."
             />
           </Card>
+          {b.placeholderPrices.length > 0 && (
+            <Card className="ring-1 ring-warning">
+              <p className="font-sans text-sm font-bold text-warning-text px-2 pt-1">Charged exactly ₹1: check the price ({b.placeholderPrices.length})</p>
+              <p className="font-sans text-xs text-muted px-2">Custom items have gone out at a ₹1 placeholder by mistake. Fix the price if it was a normal sale; if it was a free replacement, change it to ₹0.</p>
+              <Table
+                head={["Date", "Product", "Member", "Cost"]}
+                align={["l", "l", "l", "r"]}
+                rows={b.placeholderPrices.map((x) => [shortDate(x.date), x.product, x.customer, rupees(x.cogs)])}
+              />
+            </Card>
+          )}
           <Card>
             <p className="font-sans text-sm font-bold text-foreground px-2 pt-1">Given free ({b.freeItems.length})</p>
             <Table
