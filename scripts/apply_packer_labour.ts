@@ -7,8 +7,8 @@
 // (admin 2026-09-28). Allocated across each month's sold order-lines:
 //   Jul (3–31) = 7000  (paid 10 Aug, incl extras/leaves)
 //   Aug (1–31) = 8130  (paid 10 Sep)
-//   Sep (1–30) = 8000  (PROVISIONAL: base only; Sunday extras + actual pay
-//                pending, paid ~10 Oct; refine at month-end)
+//   Sep (1–30) = 8774  (8000 base + 4 Sundays worked - 1 leave, each at
+//                8000/31 = 258.06; admin 2026-10-08; paid ~10 Oct)
 //
 // Run: npm run apply-packer-labour -- [--execute]  (dry-run by default)
 
@@ -20,7 +20,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
 const PERIODS = [
   { from: "2026-07-03", to: "2026-07-31", amount: 7000, basis: "actual (Jul, paid 10 Aug)" },
   { from: "2026-08-01", to: "2026-08-31", amount: 8130, basis: "actual (Aug, paid 10 Sep)" },
-  { from: "2026-09-01", to: "2026-09-30", amount: 8000, basis: "provisional (Sep base; extras + actual pending)" },
+  { from: "2026-09-01", to: "2026-09-30", amount: 8774, basis: "actual (Sep: 8000 base + 4 Sundays - 1 leave @ 8000/31)" },
 ];
 
 async function main() {
