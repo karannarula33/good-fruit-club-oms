@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { roundToCents } from "@/lib/billing/compute";
 import { insertCredit } from "@/lib/billing/credit";
+import { cancelLinksForSettledOrders } from "@/lib/billing/payment-link";
 import type { LedgerMode } from "@/lib/supabase/database.types";
 
 export interface RecordPaymentInput {
@@ -50,6 +51,10 @@ export async function recordPayment(
   if (!result.ok) {
     return result;
   }
+
+  // Paid in cash/UPI directly: close any Razorpay link left open on an order
+  // this payment settled, so it can't be paid a second time.
+  await cancelLinksForSettledOrders(supabase, input.allocations.map((a) => a.orderId));
 
   revalidatePath(`/admin/customers/${input.customerId}`);
   return { ok: true };

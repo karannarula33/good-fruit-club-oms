@@ -5,6 +5,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { insertCredit } from "@/lib/billing/credit";
+import { cancelLinksForSettledOrders } from "@/lib/billing/payment-link";
 import type { LedgerMode } from "@/lib/supabase/database.types";
 
 // CLAUDE.md §7: "mark out_for_delivery (batch)" -- scoped to whichever
@@ -102,6 +103,8 @@ export async function deliverOrder(
     if (!result.ok) {
       return result;
     }
+    // Collected on the doorstep: close the bill's Razorpay link if this settled it.
+    await cancelLinksForSettledOrders(supabase, [orderId]);
   }
 
   revalidatePath("/delivery");

@@ -30,6 +30,7 @@ export type Salutation = "Sir" | "Ma'am";
 export type PaymentMode = "cod" | "online";
 export type ParseConfidence = "clean" | "flagged";
 export type LedgerEntryType = "debit" | "credit";
+export type PaymentLinkStatus = "created" | "paid" | "cancelled" | "expired";
 export type LedgerMode = "cash" | "upi" | "other";
 export type NudgeRecommendedAction = "message" | "call" | "skip_no_phone";
 export type NudgeStatus = "pending" | "approved" | "edited" | "relayed" | "skipped" | "snoozed" | "expired";
@@ -627,6 +628,10 @@ export interface Database {
           message_text: string | null;
           finalized_at: string | null;
           finalized_by: string | null;
+          payment_link_id: string | null;
+          payment_link_url: string | null;
+          payment_link_amount: number | null;
+          payment_link_status: PaymentLinkStatus | null;
         };
         Insert: {
           id?: string;
@@ -637,6 +642,10 @@ export interface Database {
           message_text?: string | null;
           finalized_at?: string | null;
           finalized_by?: string | null;
+          payment_link_id?: string | null;
+          payment_link_url?: string | null;
+          payment_link_amount?: number | null;
+          payment_link_status?: PaymentLinkStatus | null;
         };
         Update: {
           id?: string;
@@ -647,6 +656,10 @@ export interface Database {
           message_text?: string | null;
           finalized_at?: string | null;
           finalized_by?: string | null;
+          payment_link_id?: string | null;
+          payment_link_url?: string | null;
+          payment_link_amount?: number | null;
+          payment_link_status?: PaymentLinkStatus | null;
         };
         Relationships: [];
       };
@@ -661,6 +674,7 @@ export interface Database {
           note: string | null;
           entered_by: string | null;
           created_at: string;
+          external_ref: string | null;
         };
         Insert: {
           id?: string;
@@ -672,6 +686,7 @@ export interface Database {
           note?: string | null;
           entered_by?: string | null;
           created_at?: string;
+          external_ref?: string | null;
         };
         Update: {
           id?: string;
@@ -683,6 +698,7 @@ export interface Database {
           note?: string | null;
           entered_by?: string | null;
           created_at?: string;
+          external_ref?: string | null;
         };
         Relationships: [];
       };

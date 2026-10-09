@@ -34,6 +34,23 @@ function formatRupees(amount: number): string {
   return `₹${formatted}`;
 }
 
+function paymentLinkLines(link: { url: string; amount: number }): string[] {
+  return [`Pay this bill online (${formatRupees(link.amount)}):`, link.url, ""];
+}
+
+// Adds the payment-link lines to a bill message that was generated without
+// one (a link made later for an older bill), just above the UPI line. Falls
+// back to appending before the sign-off if the UPI line isn't there.
+export function addPaymentLinkToMessage(messageText: string, link: { url: string; amount: number }): string {
+  if (messageText.includes(link.url)) return messageText;
+  const lines = messageText.split("\n");
+  let at = lines.findIndex((l) => l.startsWith("Pay via UPI:"));
+  if (at === -1) at = lines.findIndex((l) => l === SIGN_OFF);
+  if (at === -1) at = lines.length;
+  lines.splice(at, 0, ...paymentLinkLines(link));
+  return lines.join("\n");
+}
+
 export interface BillLineItem {
   productName: string;
   actualQty: number;
@@ -49,8 +66,10 @@ export function buildBillMessage(params: {
   total: number;
   prevBalance: number;
   netDue: number;
+  // Razorpay payment link for this order's unpaid amount, when one was made.
+  paymentLink?: { url: string; amount: number } | null;
 }): string {
-  const { salutation, deliveryDate, lines, total, prevBalance, netDue } = params;
+  const { salutation, deliveryDate, lines, total, prevBalance, netDue, paymentLink } = params;
 
   const lineText =
     lines.length > 0
@@ -76,6 +95,7 @@ export function buildBillMessage(params: {
     balanceLine,
     `Net amount due: ${formatRupees(netDue)}`,
     "",
+    ...(paymentLink ? paymentLinkLines(paymentLink) : []),
     `Pay via UPI: ${UPI_ID}`,
     "or Cash on Delivery.",
     "",

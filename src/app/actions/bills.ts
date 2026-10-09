@@ -6,12 +6,16 @@ import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
 import { resolveBillLinePrices } from "@/lib/billing/resolve-line-prices";
 import { computeBillTotal, computeCustomerBalance, computeNetDue, roundLineAmount } from "@/lib/billing/compute";
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
+import { ensureBillPaymentLink, unpaidForOrder } from "@/lib/billing/payment-link";
+import { cancelPaymentLink, createPaymentLink, paymentLinksEnabled } from "@/lib/razorpay/payment-links";
 import { planAdvanceAllocation, type AdvanceCredit } from "@/lib/billing/allocate";
 import { validatePriceOverride, validateQuantityOverride } from "@/lib/billing/override";
 import { classifySalutation } from "@/lib/parser/classify-salutation";
 
 export type GenerateBillResult =
-  | { ok: true; messageText: string; customerPhone: string | null }
+  // paymentLinkError: the bill was made but its Razorpay link couldn't be;
+  // reopening the bill tries again.
+  | { ok: true; messageText: string; customerPhone: string | null; paymentLinkError?: string }
   | { ok: false; reason: "unpriced"; unpricedLineCount: number }
   | { ok: false; reason: "salutation_needed" }
   | { ok: false; reason: "error"; error: string };
@@ -45,11 +49,21 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
   // call) -- return it as-is rather than ever generating a second one.
   const { data: existingBill } = await supabase
     .from("bills")
-    .select("message_text")
+    .select("id, total, message_text, payment_link_id")
     .eq("order_id", orderId)
     .maybeSingle();
   if (existingBill) {
-    return { ok: true, messageText: existingBill.message_text ?? "", customerPhone: customer.phone };
+    // A bill made before links existed (or whose link failed) gets one now,
+    // if the order still has something unpaid.
+    const linked = await ensureBillPaymentLink(supabase, {
+      bill: existingBill,
+      orderId,
+      customerId: order.customer_id,
+      customerName: customer.display_name,
+      phone: customer.phone,
+      deliveryDate: order.delivery_date,
+    });
+    return { ok: true, messageText: linked.messageText, customerPhone: customer.phone, paymentLinkError: linked.error };
   }
 
   // Classified once per customer and cached on customers.salutation --
@@ -164,45 +178,14 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
     };
   });
 
-  const messageText = buildBillMessage({
-    salutation,
-    deliveryDate: order.delivery_date,
-    lines: billLines,
-    total,
-    prevBalance,
-    netDue,
-  });
-
-  const { error: billError } = await supabase.from("bills").insert({
-    order_id: orderId,
-    total,
-    prev_balance: prevBalance,
-    net_due: netDue,
-    message_text: messageText,
-    finalized_at: new Date().toISOString(),
-    finalized_by: profile.id,
-  });
-  if (billError) {
-    return { ok: false, reason: "error", error: billError.message };
-  }
-
-  const { error: debitError } = await supabase.from("ledger_entries").insert({
-    customer_id: order.customer_id,
-    entry_type: "debit",
-    amount: total,
-    order_id: orderId,
-    entered_by: profile.id,
-  });
-  if (debitError) {
-    return { ok: false, reason: "error", error: debitError.message };
-  }
-
   // CLAUDE.md §3.7: an existing advance auto-allocates, oldest-first, the
   // next time a bill finalizes -- purely additive bookkeeping for deriving
   // *this order's* payment status; it never touches total/prevBalance/
   // netDue above, which already account for every credit regardless of
-  // allocation state.
+  // allocation state. Planned here (written after the bill) because the
+  // payment link only asks for what the advance doesn't cover.
   const creditRows = (ledgerRows ?? []).filter((row) => row.entry_type === "credit");
+  let allocationPlan: ReturnType<typeof planAdvanceAllocation> = [];
   if (creditRows.length > 0) {
     const creditIds = creditRows.map((row) => row.id);
     const { data: allocRows, error: allocError } = await supabase
@@ -222,26 +205,85 @@ export async function generateBill(orderId: string): Promise<GenerateBillResult>
       allocatedSoFar: allocatedByCredit.get(row.id) ?? 0,
       createdAt: new Date(row.created_at),
     }));
+    allocationPlan = planAdvanceAllocation({ advances, billTotal: total });
+  }
 
-    const allocationPlan = planAdvanceAllocation({ advances, billTotal: total });
-    if (allocationPlan.length > 0) {
-      const { error: allocInsertError } = await supabase.from("payment_allocations").insert(
-        allocationPlan.map((item) => ({
-          ledger_entry_id: item.ledgerEntryId,
-          order_id: orderId,
-          amount: item.amount,
-        })),
-      );
-      if (allocInsertError) {
-        return { ok: false, reason: "error", error: allocInsertError.message };
-      }
+  // Razorpay link for this order's unpaid amount (admin, 2026-10-09: the
+  // order only, never the carried balance). An order fully covered by an
+  // advance -- e.g. prepaid on the website -- gets no link. A Razorpay
+  // failure never blocks the bill; it goes out without a link.
+  const linkAmount = unpaidForOrder(total, allocationPlan.reduce((sum, item) => sum + item.amount, 0));
+  let paymentLink: { id: string; url: string; amount: number } | null = null;
+  let paymentLinkError: string | undefined;
+  if (linkAmount > 0 && paymentLinksEnabled()) {
+    const created = await createPaymentLink({
+      orderId,
+      customerId: order.customer_id,
+      amount: linkAmount,
+      customerName: customer.display_name,
+      phone: customer.phone,
+      description: `Good Fruit Club bill for ${order.delivery_date}`,
+    });
+    if (created.ok) paymentLink = { id: created.link.id, url: created.link.shortUrl, amount: linkAmount };
+    else paymentLinkError = created.error;
+  }
+
+  const messageText = buildBillMessage({
+    salutation,
+    deliveryDate: order.delivery_date,
+    lines: billLines,
+    total,
+    prevBalance,
+    netDue,
+    paymentLink,
+  });
+
+  const { error: billError } = await supabase.from("bills").insert({
+    order_id: orderId,
+    total,
+    prev_balance: prevBalance,
+    net_due: netDue,
+    message_text: messageText,
+    finalized_at: new Date().toISOString(),
+    finalized_by: profile.id,
+    payment_link_id: paymentLink?.id ?? null,
+    payment_link_url: paymentLink?.url ?? null,
+    payment_link_amount: paymentLink?.amount ?? null,
+    payment_link_status: paymentLink ? "created" : null,
+  });
+  if (billError) {
+    if (paymentLink) await cancelPaymentLink(paymentLink.id);
+    return { ok: false, reason: "error", error: billError.message };
+  }
+
+  const { error: debitError } = await supabase.from("ledger_entries").insert({
+    customer_id: order.customer_id,
+    entry_type: "debit",
+    amount: total,
+    order_id: orderId,
+    entered_by: profile.id,
+  });
+  if (debitError) {
+    return { ok: false, reason: "error", error: debitError.message };
+  }
+
+  if (allocationPlan.length > 0) {
+    const { error: allocInsertError } = await supabase.from("payment_allocations").insert(
+      allocationPlan.map((item) => ({
+        ledger_entry_id: item.ledgerEntryId,
+        order_id: orderId,
+        amount: item.amount,
+      })),
+    );
+    if (allocInsertError) {
+      return { ok: false, reason: "error", error: allocInsertError.message };
     }
   }
 
   // No revalidatePath here on purpose -- see the matching note in
   // src/app/actions/packing.ts. The packer needs the "Send bill" button
   // to stay on screen until they explicitly tap "Done".
-  return { ok: true, messageText, customerPhone: customer.phone };
+  return { ok: true, messageText, customerPhone: customer.phone, paymentLinkError };
 }
 
 export type OverrideLinePriceResult = { ok: true } | { ok: false; error: string };

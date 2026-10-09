@@ -77,6 +77,7 @@ Customer accounts use a double-entry-lite ledger:
 - Generated as plain text, sent via a **`wa.me` deep link** pre-filled to the customer's number. No API sending in Phase 1.
 - **All customer-facing communication is from Sunita Kapoor's identity. Never any other name.**
 - Format: greeting, delivery date, line items (name, actual qty/weight, rate, amount), order total, **previous balance / advance adjustment, net amount due** (carried balance is always shown and adjusted — this is not optional), payment options line. Keep alignment WhatsApp-friendly (short lines, no tables).
+- **Razorpay payment link (added 2026-10-09):** when the bill is generated and the order still owes something, a Razorpay payment link is created for **this order's unpaid amount only** (bill total less any advance allocated to it — never the carried balance) and added above the UPI line. Orders fully covered by an advance/prepayment get no link. A `payment_link.paid` webhook (`/api/razorpay/webhook`) posts a credit allocated to the order (excess stays an advance); a manual payment that settles the order cancels the open link. Razorpay failure never blocks the bill.
 
 ### 3.9 Order entry flow (mirror the current habit exactly)
 Today the admin copies a customer's WhatsApp message and pastes it into a central chat prefixed with the customer's name. The app replaces that chat:

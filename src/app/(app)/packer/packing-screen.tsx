@@ -540,7 +540,7 @@ function PackedDetail({
   order: PackingOrder;
   isAdmin: boolean;
   onBack: () => void;
-  onBillGenerated: (bill: { messageText: string; customerPhone: string | null }) => void;
+  onBillGenerated: (bill: { messageText: string; customerPhone: string | null; paymentLinkError?: string }) => void;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -563,7 +563,7 @@ function PackedDetail({
       return;
     }
     setNeedsSalutation(false);
-    onBillGenerated({ messageText: result.messageText, customerPhone: result.customerPhone });
+    onBillGenerated({ messageText: result.messageText, customerPhone: result.customerPhone, paymentLinkError: result.paymentLinkError });
   }
 
   function handleGenerateBill() {
@@ -666,7 +666,7 @@ function BillView({
   bill,
   onDone,
 }: {
-  bill: { messageText: string; customerPhone: string | null };
+  bill: { messageText: string; customerPhone: string | null; paymentLinkError?: string };
   onDone: () => void;
 }) {
   return (
@@ -678,6 +678,11 @@ function BillView({
       <div className="font-sans text-[11px] font-bold uppercase tracking-wide text-muted">
         Sent as &quot;Sunita&quot; · WhatsApp preview
       </div>
+      {bill.paymentLinkError && (
+        <p className="rounded-xl bg-warning-bg px-3 py-2 font-sans text-xs text-warning-text">
+          Razorpay link couldn&apos;t be made ({bill.paymentLinkError}), so this bill has no link. Tap Generate Bill on this order again to retry, or send it as is.
+        </p>
+      )}
       <div className="rounded-2xl rounded-bl-[4px] bg-[#DCF3D5] p-4">
         <div className="whitespace-pre-wrap font-sans text-[13.5px] leading-[1.7] text-foreground">{bill.messageText}</div>
       </div>
@@ -721,7 +726,7 @@ export function PackingScreen({
   const { showToast } = useToast();
   const [view, setView] = useState<View>("queue");
   const [activeOrderId, setActiveOrderId] = useState<string | null>(null);
-  const [bill, setBill] = useState<{ messageText: string; customerPhone: string | null } | null>(null);
+  const [bill, setBill] = useState<{ messageText: string; customerPhone: string | null; paymentLinkError?: string } | null>(null);
 
   const toPack = orders.filter((o) => o.status === "recorded");
   const readyToBill = orders.filter((o) => o.status === "packed");
@@ -741,7 +746,7 @@ export function PackingScreen({
     backToQueue();
     router.refresh();
   }
-  function handleBillGenerated(b: { messageText: string; customerPhone: string | null }) {
+  function handleBillGenerated(b: { messageText: string; customerPhone: string | null; paymentLinkError?: string }) {
     setBill(b);
     setView("bill");
   }
