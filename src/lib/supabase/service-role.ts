@@ -1,7 +1,8 @@
 // For scripts run outside the request lifecycle (manual eval/import
-// scripts) -- bypasses RLS, never import this from app code. Single
-// exception: the Razorpay webhook (src/app/api/razorpay/webhook/route.ts),
-// which has no signed-in user and authenticates by request signature.
+// scripts) -- bypasses RLS, never import this from app code. Two
+// exceptions: the Razorpay webhook (src/app/api/razorpay/webhook/route.ts),
+// which has no signed-in user and authenticates by request signature, and
+// read-only price lookups when a packer saves an order (src/app/actions/orders.ts).
 
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";

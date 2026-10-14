@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { istWallClockToUtc } from "@/lib/time/ist";
 import { loadCatalogEntries } from "@/lib/catalog/load";
 import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
@@ -17,7 +18,10 @@ import {
 } from "@/lib/parser/parse-order";
 
 export interface DraftLine extends ParsedOrderLine {
+  // The price is only sent to admins. A packer sees whether the line has a
+  // price (`priced`) but never the amount.
   resolvedPrice: number | null;
+  priced: boolean;
 }
 
 export interface OrderDraft {
@@ -26,6 +30,17 @@ export interface OrderDraft {
   deliveryDate: string;
   lines: DraftLine[];
   notes: string;
+}
+
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+// Prices for locking order lines. Admins read them through their own session.
+// Packers can't read price tables (RLS keeps them admin-only), so for a packer
+// the server reads them with the service role -- read-only, and the amounts
+// are stored on the order line, never returned to the packer's browser.
+async function loadPricing(role: string | null, supabase: Supabase) {
+  const client = role === "admin" ? supabase : createServiceRoleClient();
+  return Promise.all([loadPriceItemRecords(client), loadPriceTierRecords(client)]);
 }
 
 async function loadCustomers(supabase: Awaited<ReturnType<typeof createClient>>): Promise<CustomerEntry[]> {
@@ -43,7 +58,8 @@ export async function parseOrderBatchDraft(
   rawText: string,
   placedAtIst: string,
 ): Promise<{ ok: true; drafts: OrderDraft[] } | { ok: false; error: string }> {
-  await requireRole(["admin"]);
+  const profile = await requireRole(["admin", "packer"]);
+  const showPrices = profile.role === "admin";
 
   if (!rawText.trim()) {
     return { ok: false, error: "Paste an order first." };
@@ -51,24 +67,23 @@ export async function parseOrderBatchDraft(
 
   try {
     const supabase = await createClient();
-    const [catalog, customers, priceItems, tierItems] = await Promise.all([
+    const [catalog, customers, [priceItems, tierItems]] = await Promise.all([
       loadCatalogEntries(supabase),
       loadCustomers(supabase),
-      loadPriceItemRecords(supabase),
-      loadPriceTierRecords(supabase),
+      loadPricing(profile.role, supabase),
     ]);
 
     const batch = await parseOrderBatchPaste(rawText, catalog, customers);
     const placedAtUtc = istWallClockToUtc(placedAtIst);
 
     const drafts: OrderDraft[] = batch.map(({ rawText: segmentRawText, order: parsed }) => {
-      const lines: DraftLine[] = parsed.lines.map((line) => ({
-        ...line,
-        resolvedPrice: line.productId
+      const lines: DraftLine[] = parsed.lines.map((line) => {
+        const price = line.productId
           ? (resolveTieredPriceForProduct(priceItems, tierItems, line.productId, placedAtUtc, line.qty ?? 0)
               ?.pricePerUnit ?? null)
-          : null,
-      }));
+          : null;
+        return { ...line, resolvedPrice: showPrices ? price : null, priced: price !== null };
+      });
 
       return {
         rawText: segmentRawText,
@@ -113,7 +128,7 @@ export interface SaveOrderInput {
 export async function saveOrder(
   input: SaveOrderInput,
 ): Promise<{ ok: true; orderId: string } | { ok: false; error: string }> {
-  const profile = await requireRole(["admin"]);
+  const profile = await requireRole(["admin", "packer"]);
 
   if (input.lines.length === 0) {
     return { ok: false, error: "No line items to save." };
@@ -209,7 +224,7 @@ export async function saveOrder(
   // still only an estimate against the ordered qty: quantity-tiered pricing
   // resolves the final rate at packing against the actual qty (see
   // src/lib/packing/finalize.ts), overwriting this value.
-  const [priceItems, tierItems] = await Promise.all([loadPriceItemRecords(supabase), loadPriceTierRecords(supabase)]);
+  const [priceItems, tierItems] = await loadPricing(profile.role, supabase);
 
   const orderLineRows = input.lines.map((line) => ({
     order_id: orderId,

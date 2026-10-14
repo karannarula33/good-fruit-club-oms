@@ -248,7 +248,7 @@ export function OrderPasteReview({
     : false;
   const canSave = customerResolved && activeLines.length > 0 && activeLines.every((line) => lineIsOk(line));
   const unresolvedLineCount = activeLines.filter((line) => !lineIsOk(line)).length;
-  const unpricedLineCount = activeLines.filter((line) => line.productId && line.resolvedPrice === null).length;
+  const unpricedLineCount = activeLines.filter((line) => line.productId && !line.priced).length;
 
   async function handleSaveCurrent() {
     if (activeIndex === null || !current) return;
