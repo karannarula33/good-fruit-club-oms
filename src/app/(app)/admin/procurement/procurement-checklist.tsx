@@ -20,6 +20,9 @@ export interface ProcurementDisplayRow {
   unitLabel: string | null;
   totalQty: number;
   extraQty: number;
+  leftoverQty: number;
+  toProcureQty: number;
+  surplusQty: number;
   contributions: ProcurementContribution[];
   checked: boolean;
 }
@@ -28,7 +31,20 @@ function contributionsText(contributions: ProcurementContribution[]): string {
   return contributions.map((c) => `${c.customerName} ${c.qty}`).join(", ");
 }
 
-export function ProcurementChecklist({ date, rows }: { date: string; rows: ProcurementDisplayRow[] }) {
+function formatAsOf(dateStr: string): string {
+  const [, m, d] = dateStr.split("-").map(Number);
+  return `${d}/${m}`;
+}
+
+export function ProcurementChecklist({
+  date,
+  rows,
+  leftoverAsOf,
+}: {
+  date: string;
+  rows: ProcurementDisplayRow[];
+  leftoverAsOf: string | null;
+}) {
   const router = useRouter();
   const { showToast } = useToast();
 
@@ -70,9 +86,13 @@ export function ProcurementChecklist({ date, rows }: { date: string; rows: Procu
   }
 
   function openPreview() {
+    // Tell the vendor the NET quantity to buy (demand − leftover), and drop
+    // anything already fully covered by leftover stock.
     const text = buildProcurementMessage(
       date,
-      selectedRows.map((row) => ({ name: row.name, qty: row.totalQty, unitLabel: row.unitLabel })),
+      selectedRows
+        .filter((row) => row.toProcureQty > 0)
+        .map((row) => ({ name: row.name, qty: row.toProcureQty, unitLabel: row.unitLabel })),
     );
     setPreviewText(text);
   }
@@ -89,6 +109,11 @@ export function ProcurementChecklist({ date, rows }: { date: string; rows: Procu
 
   return (
     <div className="flex flex-col gap-4">
+      {leftoverAsOf && (
+        <p className="font-sans text-[11.5px] font-semibold text-muted">
+          Netting leftover stock counted {formatAsOf(leftoverAsOf)}.
+        </p>
+      )}
       <div className="flex flex-col gap-2">
         {rows.map((row) => {
           const isSent = sent.has(row.productId) || (row.checked && row.extraQty === 0);
@@ -116,9 +141,25 @@ export function ProcurementChecklist({ date, rows }: { date: string; rows: Procu
                 )}
               </div>
               <div className="flex shrink-0 flex-col items-end gap-1">
-                <div className="font-sans text-[12.5px] font-semibold text-muted">
-                  {row.totalQty} {row.unitLabel ?? ""}
-                </div>
+                {row.leftoverQty > 0 ? (
+                  <>
+                    <div className={cn("font-sans text-[13px] font-bold", isSent ? "text-muted" : "text-foreground")}>
+                      buy {row.toProcureQty} {row.unitLabel ?? ""}
+                    </div>
+                    <div className="font-sans text-[11px] font-medium text-muted">
+                      ordered {row.totalQty}, {row.leftoverQty} left
+                    </div>
+                  </>
+                ) : (
+                  <div className="font-sans text-[12.5px] font-semibold text-muted">
+                    {row.totalQty} {row.unitLabel ?? ""}
+                  </div>
+                )}
+                {row.surplusQty > 0 && (
+                  <Badge tone="neutral" size="sm">
+                    surplus {row.surplusQty}
+                  </Badge>
+                )}
                 {row.extraQty > 0 && (
                   <Badge tone="warning" size="sm" key={row.extraQty}>
                     +{row.extraQty} new

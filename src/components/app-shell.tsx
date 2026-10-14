@@ -22,6 +22,7 @@ const TABS: Record<Role, { href: string; label: string }[]> = {
   admin: [
     { href: "/admin/orders", label: "Orders" },
     { href: "/packer", label: "Packing" },
+    { href: "/packer/stock", label: "Stock" },
     { href: "/admin/dispatch", label: "Dispatch" },
     { href: "/admin/procurement", label: "Procure" },
     { href: "/admin/prices", label: "Prices" },
@@ -32,7 +33,10 @@ const TABS: Record<Role, { href: string; label: string }[]> = {
     { href: "/admin/manage-orders", label: "Manage" },
     { href: "/admin/dashboard", label: "Dashboard" },
   ],
-  packer: [{ href: "/packer", label: "Packing" }],
+  packer: [
+    { href: "/packer", label: "Packing" },
+    { href: "/packer/stock", label: "Stock" },
+  ],
   delivery: [{ href: "/delivery", label: "Route" }],
 };
 

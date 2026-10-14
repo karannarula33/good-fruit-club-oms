@@ -65,3 +65,50 @@ describe("aggregateProcurement", () => {
     expect(row.extraQty).toBe(0);
   });
 });
+
+describe("aggregateProcurement — leftover netting", () => {
+  it("defaults to no leftover (toProcure = demand) when no map is passed", () => {
+    const [row] = aggregateProcurement([line(MANGO, 3, "Rita")], NONE);
+    expect(row.leftoverQty).toBe(0);
+    expect(row.toProcureQty).toBe(3);
+    expect(row.surplusQty).toBe(0);
+  });
+
+  it("subtracts leftover from demand", () => {
+    const [row] = aggregateProcurement([line(MANGO, 3, "Rita")], NONE, new Map([[MANGO, 1.2]]));
+    expect(row.leftoverQty).toBe(1.2);
+    expect(row.toProcureQty).toBe(1.8);
+    expect(row.surplusQty).toBe(0);
+  });
+
+  it("floors toProcure at 0 and reports surplus when leftover exceeds demand", () => {
+    const [row] = aggregateProcurement([line(MANGO, 2, "Rita")], NONE, new Map([[MANGO, 5]]));
+    expect(row.toProcureQty).toBe(0);
+    expect(row.surplusQty).toBe(3);
+  });
+
+  it("surfaces a leftover-only product (no orders) as a surplus row with demand 0", () => {
+    const rows = aggregateProcurement([line(MANGO, 2, "Rita")], NONE, new Map([[BANANA, 4]]));
+    const banana = rows.find((r) => r.productId === BANANA);
+    expect(banana).toBeDefined();
+    expect(banana?.totalQty).toBe(0);
+    expect(banana?.toProcureQty).toBe(0);
+    expect(banana?.surplusQty).toBe(4);
+  });
+
+  it("rounds the netted quantity to 3 dp", () => {
+    const [row] = aggregateProcurement([line(MANGO, 2.555, "Rita")], NONE, new Map([[MANGO, 1.11]]));
+    expect(row.toProcureQty).toBe(1.445);
+  });
+});
+
+describe("procurementQty", () => {
+  it("converts grams to kg and leaves every other unit as entered", async () => {
+    const { procurementQty } = await import("@/lib/procurement/aggregate");
+    expect(procurementQty(500, "g")).toBe(0.5);
+    expect(procurementQty(250, "Gms")).toBe(0.25);
+    expect(procurementQty(1, "kg")).toBe(1);
+    expect(procurementQty(2, "box")).toBe(2);
+    expect(procurementQty(3, null)).toBe(3);
+  });
+});

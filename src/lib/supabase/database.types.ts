@@ -663,6 +663,36 @@ export interface Database {
         };
         Relationships: [];
       };
+      inventory_snapshots: {
+        Row: {
+          id: string;
+          as_of_date: string;
+          product_id: string;
+          qty: number;
+          recorded_by: string | null;
+          recorded_at: string;
+          note: string | null;
+        };
+        Insert: {
+          id?: string;
+          as_of_date: string;
+          product_id: string;
+          qty: number;
+          recorded_by?: string | null;
+          recorded_at?: string;
+          note?: string | null;
+        };
+        Update: {
+          id?: string;
+          as_of_date?: string;
+          product_id?: string;
+          qty?: number;
+          recorded_by?: string | null;
+          recorded_at?: string;
+          note?: string | null;
+        };
+        Relationships: [];
+      };
       ledger_entries: {
         Row: {
           id: string;
