@@ -274,6 +274,7 @@ export interface Database {
           locked_price_per_unit: number | null;
           locked_cogs_per_unit: number | null;
           actual_qty: number | null;
+          billed_qty: number | null;
           line_status: LineStatus;
           is_substitution: boolean;
           substituted_for_line_id: string | null;
@@ -294,6 +295,7 @@ export interface Database {
           locked_price_per_unit?: number | null;
           locked_cogs_per_unit?: number | null;
           actual_qty?: number | null;
+          billed_qty?: number | null;
           line_status?: LineStatus;
           is_substitution?: boolean;
           substituted_for_line_id?: string | null;
@@ -314,6 +316,7 @@ export interface Database {
           locked_price_per_unit?: number | null;
           locked_cogs_per_unit?: number | null;
           actual_qty?: number | null;
+          billed_qty?: number | null;
           line_status?: LineStatus;
           is_substitution?: boolean;
           substituted_for_line_id?: string | null;
@@ -594,6 +597,7 @@ export interface Database {
           order_line_id: string;
           previous_qty: number | null;
           new_qty: number;
+          field: "actual" | "billed";
           reason: string;
           overridden_by: string | null;
           overridden_at: string;
@@ -603,6 +607,7 @@ export interface Database {
           order_line_id: string;
           previous_qty?: number | null;
           new_qty: number;
+          field?: "actual" | "billed";
           reason: string;
           overridden_by?: string | null;
           overridden_at?: string;
@@ -612,6 +617,7 @@ export interface Database {
           order_line_id?: string;
           previous_qty?: number | null;
           new_qty?: number;
+          field?: "actual" | "billed";
           reason?: string;
           overridden_by?: string | null;
           overridden_at?: string;

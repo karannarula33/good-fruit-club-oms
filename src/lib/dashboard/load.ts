@@ -35,7 +35,7 @@ export async function loadSnapshot(supabase: Client): Promise<Snapshot & { schem
   const linesRaw = await pageAll((f, t) =>
     supabase
       .from("order_lines")
-      .select("order_id, product_id, actual_qty, locked_price_per_unit, locked_cogs_per_unit, actual_packaging_cost, actual_delivery_cost, actual_labour_cost, line_status, is_substitution, is_gift_box")
+      .select("order_id, product_id, actual_qty, billed_qty, locked_price_per_unit, locked_cogs_per_unit, actual_packaging_cost, actual_delivery_cost, actual_labour_cost, line_status, is_substitution, is_gift_box")
       .order("id")
       .range(f, t),
   );
@@ -73,6 +73,7 @@ export async function loadSnapshot(supabase: Client): Promise<Snapshot & { schem
     list.push({
       productId: l.product_id,
       actualQty: l.actual_qty === null ? null : Number(l.actual_qty),
+      billedQty: l.billed_qty === null ? null : Number(l.billed_qty),
       price: l.locked_price_per_unit === null ? null : Number(l.locked_price_per_unit),
       cogsPerUnit: l.locked_cogs_per_unit === null ? null : Number(l.locked_cogs_per_unit),
       packaging: l.actual_packaging_cost === null ? null : Number(l.actual_packaging_cost),

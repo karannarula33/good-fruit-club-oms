@@ -13,6 +13,7 @@ import { cancelPaymentLink, createPaymentLink, paymentLinksEnabled } from "@/lib
 import { planAdvanceAllocation, type AdvanceCredit } from "@/lib/billing/allocate";
 import { validatePriceOverride, validateQuantityOverride } from "@/lib/billing/override";
 import { classifySalutation } from "@/lib/parser/classify-salutation";
+import { billedQuantity, validateBilledQty } from "@/lib/billing/qty";
 
 export type GenerateBillResult =
   // paymentLinkError: the bill was made but its Razorpay link couldn't be;
@@ -106,7 +107,7 @@ async function generateBillWith(
 
   const { data: lineRows, error: linesError } = await supabase
     .from("order_lines")
-    .select("id, product_id, actual_qty, locked_price_per_unit, products(name, unit_label)")
+    .select("id, product_id, actual_qty, billed_qty, locked_price_per_unit, products(name, unit_label)")
     .eq("order_id", orderId)
     .eq("line_status", "packed");
   if (linesError) {
@@ -134,7 +135,8 @@ async function generateBillWith(
     (lineRows ?? []).map((line) => ({
       id: line.id,
       productId: line.product_id,
-      actualQty: line.actual_qty as number | null,
+      // Billed on the billed qty (falls back to packed), see src/lib/billing/qty.ts.
+      actualQty: billedQuantity({ actualQty: line.actual_qty, billedQty: line.billed_qty }),
       lockedPricePerUnit: line.locked_price_per_unit,
     })),
     overriddenLineIds,
@@ -162,7 +164,7 @@ async function generateBillWith(
   const effectivePriceForLine = (line: { id: string }) => resolvedPriceByLineId.get(line.id) ?? null;
 
   const billableLines = (lineRows ?? []).map((line) => ({
-    actualQty: line.actual_qty as number,
+    actualQty: billedQuantity({ actualQty: line.actual_qty, billedQty: line.billed_qty }) as number,
     lockedPricePerUnit: effectivePriceForLine(line),
   }));
 
@@ -185,7 +187,7 @@ async function generateBillWith(
 
   const billLines: BillLineItem[] = (lineRows ?? []).map((line) => {
     const product = line.products as unknown as { name: string; unit_label: string | null } | null;
-    const actualQty = line.actual_qty as number;
+    const actualQty = billedQuantity({ actualQty: line.actual_qty, billedQty: line.billed_qty }) as number;
     const ratePerUnit = effectivePriceForLine(line) as number;
     return {
       productName: product?.name ?? "Item",
@@ -382,15 +384,19 @@ export async function overrideLineQuantity(
   orderLineId: string,
   newQty: number,
   reason: string,
+  // "actual" = packed qty (admin only; COGS uses it). "billed" = what the
+  // customer is billed for (admin or a packer with billing access).
+  field: "actual" | "billed" = "actual",
 ): Promise<OverrideLineQuantityResult> {
-  // Admin, or a packer with billing access correcting a weight before
+  // Admin, or a packer with billing access correcting the billed qty before
   // generating the bill (no RLS insert on quantity_overrides for packers).
   const { profile, isAdmin } = await requireBillingAccess();
+  if (field === "actual" && !isAdmin) return { ok: false, error: "Only the admin can change the packed quantity." };
   const supabase = isAdmin ? await createClient() : createServiceRoleClient();
 
   const { data: line, error: lineError } = await supabase
     .from("order_lines")
-    .select("id, order_id, actual_qty, line_status, orders(status)")
+    .select("id, order_id, actual_qty, billed_qty, line_status, orders(status)")
     .eq("id", orderLineId)
     .single();
   if (lineError || !line) {
@@ -404,8 +410,13 @@ export async function overrideLineQuantity(
     .eq("order_id", line.order_id)
     .maybeSingle();
 
+  if (field === "billed") {
+    const qtyCheck = validateBilledQty(newQty);
+    if (!qtyCheck.ok) return qtyCheck;
+  }
   const validation = validateQuantityOverride({
-    newQty,
+    // 0 is a valid billed qty (given free); the shared guard wants > 0.
+    newQty: field === "billed" && newQty === 0 ? 1 : newQty,
     reason,
     orderStatus: order?.status ?? "",
     lineStatus: line.line_status,
@@ -415,10 +426,12 @@ export async function overrideLineQuantity(
     return validation;
   }
 
+  const previous = field === "billed" ? (line.billed_qty ?? line.actual_qty) : line.actual_qty;
   const { error: overrideError } = await supabase.from("quantity_overrides").insert({
     order_line_id: orderLineId,
-    previous_qty: line.actual_qty,
+    previous_qty: previous,
     new_qty: newQty,
+    field,
     reason: reason.trim(),
     overridden_by: profile.id,
   });
@@ -428,7 +441,7 @@ export async function overrideLineQuantity(
 
   const { error: updateError } = await supabase
     .from("order_lines")
-    .update({ actual_qty: newQty })
+    .update(field === "billed" ? { billed_qty: newQty } : { actual_qty: newQty })
     .eq("id", orderLineId);
   if (updateError) {
     return { ok: false, error: updateError.message };

@@ -55,8 +55,9 @@ export interface BillLineEdit {
 
 export function validateBillLineEdit(edit: BillLineEdit): { ok: true } | { ok: false; error: string } {
   if (edit.qty === undefined && edit.price === undefined) return { ok: false, error: "Nothing to change." };
-  if (edit.qty !== undefined && (!Number.isFinite(edit.qty) || edit.qty <= 0)) {
-    return { ok: false, error: "Quantity must be greater than zero." };
+  // qty here is the billed qty: 0 is allowed (an item given free).
+  if (edit.qty !== undefined && (!Number.isFinite(edit.qty) || edit.qty < 0)) {
+    return { ok: false, error: "Quantity can't be negative." };
   }
   if (edit.price !== undefined && (!Number.isFinite(edit.price) || edit.price <= 0)) {
     return { ok: false, error: "Rate must be greater than zero." };

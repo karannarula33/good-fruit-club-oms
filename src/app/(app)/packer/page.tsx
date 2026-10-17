@@ -39,7 +39,7 @@ export default async function PackerPage({
         ? supabase
             .from("order_lines")
             .select(
-              "id, order_id, product_id, ordered_qty, ordered_unit, actual_qty, locked_price_per_unit, line_status, package_id",
+              "id, order_id, product_id, ordered_qty, ordered_unit, actual_qty, billed_qty, locked_price_per_unit, line_status, package_id",
             )
             .in("order_id", orderIds)
         : Promise.resolve({ data: [] }),
@@ -76,7 +76,7 @@ export default async function PackerPage({
       packedLines.map((l) => ({
         id: l.id,
         productId: l.product_id,
-        actualQty: l.actual_qty,
+        actualQty: l.billed_qty ?? l.actual_qty, // priced on the billed qty
         lockedPricePerUnit: l.locked_price_per_unit,
       })),
       overriddenLineIds,
@@ -100,6 +100,7 @@ export default async function PackerPage({
     ordered_qty: number | null;
     ordered_unit: string | null;
     actual_qty: number | null;
+    billed_qty: number | null;
     locked_price_per_unit: number | null;
     line_status: "pending" | "packed" | "unavailable";
     package_id: string | null;
@@ -127,6 +128,7 @@ export default async function PackerPage({
             orderedQty: line.ordered_qty,
             orderedUnit: line.ordered_unit,
             actualQty: line.actual_qty,
+            billedQty: line.billed_qty,
             lockedPricePerUnit: resolvedPriceByLineId.has(line.id)
               ? resolvedPriceByLineId.get(line.id)!
               : line.locked_price_per_unit,

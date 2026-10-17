@@ -56,9 +56,11 @@ describe("editing a generated bill: input checks", () => {
     expect(validateBillLineEdit({ qty: 1.25 })).toEqual({ ok: true });
     expect(validateBillLineEdit({ price: 340 })).toEqual({ ok: true });
   });
-  it("rejects empty, zero or negative values", () => {
+  it("allows a zero billed qty (given free) but rejects empty, negative or a zero rate", () => {
+    expect(validateBillLineEdit({ qty: 0 })).toEqual({ ok: true });
     expect(validateBillLineEdit({}).ok).toBe(false);
-    expect(validateBillLineEdit({ qty: 0 }).ok).toBe(false);
+    expect(validateBillLineEdit({ qty: -0.5 }).ok).toBe(false);
+    expect(validateBillLineEdit({ price: 0 }).ok).toBe(false);
     expect(validateBillLineEdit({ price: -1 }).ok).toBe(false);
     expect(validateBillLineEdit({ qty: Number.NaN }).ok).toBe(false);
   });

@@ -66,6 +66,7 @@ interface ExportOrderLine {
   ordered_unit: string | null;
   locked_price_per_unit: number | null;
   actual_qty: number | null;
+  billed_qty: number | null;
   line_status: string;
   is_substitution: boolean;
   package_id: string | null;
@@ -124,7 +125,7 @@ export async function GET(request: Request) {
         ? supabase
             .from("order_lines")
             .select(
-              "id, order_id, product_id, ordered_qty, ordered_unit, locked_price_per_unit, actual_qty, line_status, is_substitution, package_id",
+              "id, order_id, product_id, ordered_qty, ordered_unit, locked_price_per_unit, actual_qty, billed_qty, line_status, is_substitution, package_id",
             )
             .in("order_id", orderIds)
         : Promise.resolve({ data: [] }),
@@ -216,9 +217,10 @@ export async function GET(request: Request) {
 
       group.forEach((line, i) => {
         const product = line.product_id ? productById.get(line.product_id) : undefined;
+        const billedQty = line.billed_qty ?? line.actual_qty;
         const lineAmount =
-          line.actual_qty !== null && line.locked_price_per_unit !== null
-            ? Math.round(line.actual_qty * line.locked_price_per_unit * 100) / 100
+          billedQty !== null && line.locked_price_per_unit !== null
+            ? Math.round(billedQty * line.locked_price_per_unit * 100) / 100
             : "";
         sheet.addRow([
           ...orderFields,

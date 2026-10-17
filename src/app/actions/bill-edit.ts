@@ -47,17 +47,20 @@ export async function editBilledLine(orderId: string, lineId: string, edit: Bill
 
   const { data: line } = await supabase
     .from("order_lines")
-    .select("id, actual_qty, locked_price_per_unit, line_status")
+    .select("id, actual_qty, billed_qty, locked_price_per_unit, line_status")
     .eq("id", lineId)
     .eq("order_id", orderId)
     .single();
   if (!line || line.line_status !== "packed") return { ok: false, error: "That item isn't on the bill." };
 
-  const update: { actual_qty?: number; locked_price_per_unit?: number } = {};
-  if (edit.qty !== undefined && edit.qty !== Number(line.actual_qty)) {
-    update.actual_qty = edit.qty;
+  // On a billed order the qty edit is the BILLED qty; the packed qty
+  // (actual_qty, used for COGS) is left alone.
+  const update: { billed_qty?: number; locked_price_per_unit?: number } = {};
+  const currentBilled = Number(line.billed_qty ?? line.actual_qty);
+  if (edit.qty !== undefined && edit.qty !== currentBilled) {
+    update.billed_qty = edit.qty;
     const { error } = await supabase.from("quantity_overrides").insert({
-      order_line_id: lineId, previous_qty: line.actual_qty, new_qty: edit.qty, reason: EDIT_REASON, overridden_by: profile.id,
+      order_line_id: lineId, previous_qty: currentBilled, new_qty: edit.qty, field: "billed", reason: EDIT_REASON, overridden_by: profile.id,
     });
     if (error) return { ok: false, error: error.message };
   }
@@ -151,13 +154,13 @@ async function rebuildBill(supabase: Client, orderId: string): Promise<BillEditR
 
   const { data: lineRows, error: linesError } = await supabase
     .from("order_lines")
-    .select("id, actual_qty, locked_price_per_unit, products(name, unit_label)")
+    .select("id, actual_qty, billed_qty, locked_price_per_unit, products(name, unit_label)")
     .eq("order_id", orderId)
     .eq("line_status", "packed");
   if (linesError) return { ok: false, error: linesError.message };
 
   const { total: lineTotal, unpricedLineCount } = computeBillTotal(
-    (lineRows ?? []).map((l) => ({ actualQty: Number(l.actual_qty ?? 0), lockedPricePerUnit: l.locked_price_per_unit })),
+    (lineRows ?? []).map((l) => ({ actualQty: Number(l.billed_qty ?? l.actual_qty ?? 0), lockedPricePerUnit: l.locked_price_per_unit })),
   );
   if (unpricedLineCount > 0) return { ok: false, error: `${unpricedLineCount} item(s) on this bill have no rate — set one first.` };
   const total = roundToCents(lineTotal);
@@ -217,7 +220,7 @@ async function rebuildBill(supabase: Client, orderId: string): Promise<BillEditR
 
   const billLines: BillLineItem[] = (lineRows ?? []).map((l) => {
     const product = l.products as unknown as { name: string; unit_label: string | null } | null;
-    const qty = Number(l.actual_qty);
+    const qty = Number(l.billed_qty ?? l.actual_qty);
     const rate = Number(l.locked_price_per_unit);
     return { productName: product?.name ?? "Item", actualQty: qty, unitLabel: product?.unit_label ?? null, ratePerUnit: rate, amount: roundLineAmount(qty, rate) };
   });

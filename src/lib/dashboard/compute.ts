@@ -15,6 +15,7 @@ import { roundLineAmount, roundToCents } from "@/lib/billing/compute";
 export interface DashboardLine {
   productId: string | null;
   actualQty: number | null;
+  billedQty?: number | null; // billed to the customer; revenue uses it, COGS uses actualQty
   lockedPricePerUnit: number | null;
   lockedCogsPerUnit: number | null;
   actualPackagingCost: number | null;
@@ -62,8 +63,9 @@ export interface MonthAggregate {
 }
 
 function lineRevenue(line: DashboardLine): number {
-  if (line.actualQty === null || line.lockedPricePerUnit === null) return 0;
-  return roundLineAmount(line.actualQty, line.lockedPricePerUnit);
+  const qty = line.billedQty ?? line.actualQty;
+  if (qty === null || line.lockedPricePerUnit === null) return 0;
+  return roundLineAmount(qty, line.lockedPricePerUnit);
 }
 
 function lineCogs(line: DashboardLine): number {

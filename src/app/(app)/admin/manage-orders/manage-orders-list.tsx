@@ -29,7 +29,8 @@ export interface ManageOrderLine {
   unitLabel: string | null;
   orderedQty: number | null;
   orderedUnit: string | null;
-  actualQty: number | null;
+  actualQty: number | null; // packed (COGS)
+  billedQty: number | null; // billed; null = same as packed
   rate: number | null;
   lineStatus: LineStatus;
 }
@@ -350,7 +351,10 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
 
             <div className="flex flex-col gap-2">
               {openOrder.lines.map((line) => {
-                const qty = qtyOverrideByLineId.get(line.id) ?? displayQty(line);
+                // On a billed order the qty shown and edited is the billed qty.
+                const qty =
+                  qtyOverrideByLineId.get(line.id) ??
+                  (openOrder.billEditable && line.lineStatus === "packed" ? (line.billedQty ?? line.actualQty) : displayQty(line));
                 const isEditing = editingLineId === line.id;
                 const product = products.find((p) => p.name === line.productName);
                 // On a billed order only items still on the bill can change.
@@ -396,6 +400,9 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
                           {line.lineStatus === "packed" ? (
                             <>
                               {qty} {line.unitLabel ?? line.orderedUnit ?? ""} × ₹{line.rate ?? "—"}
+                              {line.billedQty !== null && line.billedQty !== line.actualQty && (
+                                <span className="ml-1 text-tertiary">(packed {line.actualQty ?? "—"})</span>
+                              )}
                               {line.rate !== null && qty !== null && (
                                 <span className="ml-1 text-foreground">= ₹{Math.round(qty * line.rate)}</span>
                               )}

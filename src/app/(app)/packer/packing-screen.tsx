@@ -30,7 +30,8 @@ export interface PackingLine {
   unitLabel: string | null;
   orderedQty: number | null;
   orderedUnit: string | null;
-  actualQty: number | null;
+  actualQty: number | null; // packed (COGS)
+  billedQty: number | null; // billed to the customer; null = same as packed
   lockedPricePerUnit: number | null;
   lineStatus: "pending" | "packed" | "unavailable";
   packageId: string | null;
@@ -423,16 +424,19 @@ function EditableDetail({
 function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden: () => void }) {
   const [pending, startTransition] = useTransition();
   const [editing, setEditing] = useState(false);
-  const [qtyInput, setQtyInput] = useState("");
+  const [packedInput, setPackedInput] = useState("");
+  const [billedInput, setBilledInput] = useState("");
   const [priceInput, setPriceInput] = useState("");
   const [reasonInput, setReasonInput] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const price = line.lockedPricePerUnit ?? 0;
-  const qty = line.actualQty ?? 0;
+  const packed = line.actualQty ?? 0;
+  const billed = line.billedQty ?? packed; // billed defaults to packed until edited
 
   function startEditing() {
-    setQtyInput(qty ? String(qty) : "");
+    setPackedInput(packed ? String(packed) : "");
+    setBilledInput(String(billed));
     setPriceInput(price ? String(price) : "");
     setReasonInput("");
     setError(null);
@@ -441,23 +445,29 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
 
   function handleSave() {
     setError(null);
-    const newQty = Number(qtyInput);
+    const newPacked = Number(packedInput);
+    const newBilled = Number(billedInput);
     const newPrice = Number(priceInput);
-    const qtyChanged = newQty !== qty;
+    const packedChanged = newPacked !== packed;
+    const billedChanged = newBilled !== billed;
     const priceChanged = newPrice !== price;
-    if (!qtyChanged && !priceChanged) {
+    if (!packedChanged && !billedChanged && !priceChanged) {
       setEditing(false);
       return;
     }
     startTransition(async () => {
-      const results = await Promise.all([
-        qtyChanged ? overrideLineQuantity(line.id, newQty, reasonInput) : null,
-        priceChanged ? overrideLinePrice(line.id, newPrice, reasonInput) : null,
-      ]);
-      const failed = results.find((r) => r && !r.ok);
-      if (failed && !failed.ok) {
-        setError(failed.error);
-        return;
+      // Packed first, then billed. A billed qty nobody set follows packed.
+      if (packedChanged) {
+        const r = await overrideLineQuantity(line.id, newPacked, reasonInput, "actual");
+        if (!r.ok) return setError(r.error);
+      }
+      if (billedChanged) {
+        const r = await overrideLineQuantity(line.id, newBilled, reasonInput, "billed");
+        if (!r.ok) return setError(r.error);
+      }
+      if (priceChanged) {
+        const r = await overrideLinePrice(line.id, newPrice, reasonInput);
+        if (!r.ok) return setError(r.error);
       }
       setEditing(false);
       onOverridden();
@@ -468,28 +478,42 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
     return (
       <Card elevated className="!space-y-2">
         <div className="font-sans text-sm font-bold text-foreground">{line.productName}</div>
-        <div className="flex gap-2">
-          <Input
-            size="lg"
-            type="number"
-            inputMode={line.unitType === "weight" ? "decimal" : "numeric"}
-            step={line.unitType === "weight" ? "0.001" : "1"}
-            min="0"
-            placeholder={`New ${line.unitLabel ?? "qty"}`}
-            value={qtyInput}
-            onChange={(e) => setQtyInput(e.target.value)}
-            className="w-24"
-          />
-          <Input
-            size="lg"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="New price / unit"
-            value={priceInput}
-            onChange={(e) => setPriceInput(e.target.value)}
-            className="w-32"
-          />
+        <div className="grid grid-cols-3 gap-2">
+          <label className="flex flex-col gap-1 font-sans text-[11px] font-bold uppercase tracking-wide text-muted">
+            Packed {line.unitLabel ?? ""}
+            <Input
+              size="lg"
+              type="number"
+              inputMode={line.unitType === "weight" ? "decimal" : "numeric"}
+              step={line.unitType === "weight" ? "0.001" : "1"}
+              min="0"
+              value={packedInput}
+              onChange={(e) => setPackedInput(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1 font-sans text-[11px] font-bold uppercase tracking-wide text-muted">
+            Billed {line.unitLabel ?? ""}
+            <Input
+              size="lg"
+              type="number"
+              inputMode={line.unitType === "weight" ? "decimal" : "numeric"}
+              step={line.unitType === "weight" ? "0.001" : "1"}
+              min="0"
+              value={billedInput}
+              onChange={(e) => setBilledInput(e.target.value)}
+            />
+          </label>
+          <label className="flex flex-col gap-1 font-sans text-[11px] font-bold uppercase tracking-wide text-muted">
+            ₹ / unit
+            <Input
+              size="lg"
+              type="number"
+              step="0.01"
+              min="0"
+              value={priceInput}
+              onChange={(e) => setPriceInput(e.target.value)}
+            />
+          </label>
         </div>
         <Input
           size="lg"
@@ -516,7 +540,8 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
       <div>
         <div className="font-sans text-sm font-bold text-foreground">{line.productName}</div>
         <div className="flex items-center gap-1.5 font-sans text-[11.5px] font-semibold text-muted">
-          {qty} {line.unitLabel ?? ""} @ ₹{price.toFixed(2)}
+          {billed} {line.unitLabel ?? ""} @ ₹{price.toFixed(2)}
+          {billed !== packed && <span className="text-tertiary">(packed {packed})</span>}
           <button
             type="button"
             onClick={startEditing}
@@ -527,7 +552,7 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
           </button>
         </div>
       </div>
-      <div className="font-display text-sm font-bold text-foreground">₹{(qty * price).toFixed(2)}</div>
+      <div className="font-display text-sm font-bold text-foreground">₹{Math.round(billed * price).toFixed(2)}</div>
     </Card>
   );
 }
@@ -540,12 +565,13 @@ function PackerBillLineRow({ orderId, line, onChanged }: { orderId: string; line
   const [qtyInput, setQtyInput] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const qty = line.actualQty ?? 0;
+  const packed = line.actualQty ?? 0;
+  const qty = line.billedQty ?? packed; // billed qty; defaults to packed until edited
 
   function handleSave() {
     const newQty = Number(qtyInput);
-    if (!Number.isFinite(newQty) || newQty <= 0) {
-      setError("Enter a quantity greater than zero.");
+    if (!Number.isFinite(newQty) || newQty < 0) {
+      setError("Billed quantity can't be negative.");
       return;
     }
     if (newQty === qty) {
@@ -554,7 +580,7 @@ function PackerBillLineRow({ orderId, line, onChanged }: { orderId: string; line
     }
     setError(null);
     startTransition(async () => {
-      const result = await overrideLineQuantity(line.id, newQty, "Corrected at billing");
+      const result = await overrideLineQuantity(line.id, newQty, "Billed qty set at billing", "billed");
       if (!result.ok) {
         setError(result.error);
         return;
@@ -589,7 +615,7 @@ function PackerBillLineRow({ orderId, line, onChanged }: { orderId: string; line
           <div className="font-sans text-sm font-bold text-foreground">{line.productName}</div>
           {!editing && (
             <div className="font-sans text-[12.5px] font-semibold text-muted">
-              {line.actualQty ?? "—"} {line.unitLabel ?? ""}
+              Packed {line.actualQty ?? "—"} {line.unitLabel ?? ""} · <span className="text-foreground">Bill {qty} {line.unitLabel ?? ""}</span>
             </div>
           )}
         </div>
@@ -603,7 +629,7 @@ function PackerBillLineRow({ orderId, line, onChanged }: { orderId: string; line
                 setError(null);
                 setEditing(true);
               }}
-              aria-label={`Edit quantity for ${line.productName}`}
+              aria-label={`Edit billed quantity for ${line.productName}`}
               className="rounded-full p-2 text-muted disabled:opacity-40"
             >
               <Pencil className="size-4" />
@@ -633,7 +659,9 @@ function PackerBillLineRow({ orderId, line, onChanged }: { orderId: string; line
             onChange={(e) => setQtyInput(e.target.value)}
             className="w-28"
           />
-          <span className="font-sans text-[12.5px] font-semibold text-muted">{line.unitLabel ?? ""}</span>
+          <span className="font-sans text-[12.5px] font-semibold text-muted">
+            {line.unitLabel ?? ""} to bill (packed {packed})
+          </span>
           <div className="ml-auto flex gap-2">
             <Button variant="secondary" size="sm" onClick={() => setEditing(false)} disabled={pending}>
               Cancel

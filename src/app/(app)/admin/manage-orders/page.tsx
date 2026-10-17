@@ -44,7 +44,7 @@ export default async function ManageOrdersPage({
     orderIds.length
       ? supabase
           .from("order_lines")
-          .select("id, order_id, product_id, ordered_qty, ordered_unit, actual_qty, locked_price_per_unit, line_status, package_id")
+          .select("id, order_id, product_id, ordered_qty, ordered_unit, actual_qty, billed_qty, locked_price_per_unit, line_status, package_id")
           .in("order_id", orderIds)
       : Promise.resolve({ data: [] }),
     supabase.from("products").select("id, name, unit_label"),
@@ -75,6 +75,7 @@ export default async function ManageOrdersPage({
       ordered_qty: number | null;
       ordered_unit: string | null;
       actual_qty: number | null;
+      billed_qty: number | null;
       locked_price_per_unit: number | null;
       line_status: LineStatus;
     }[]
@@ -96,6 +97,7 @@ export default async function ManageOrdersPage({
         orderedQty: line.ordered_qty,
         orderedUnit: line.ordered_unit,
         actualQty: line.actual_qty,
+        billedQty: line.billed_qty,
         rate: line.locked_price_per_unit,
         lineStatus: line.line_status,
       };

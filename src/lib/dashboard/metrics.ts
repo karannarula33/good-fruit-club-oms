@@ -7,7 +7,7 @@
 //     delivery costs are booked), not when it was placed.
 //   * Cancelled orders and internal customers (e.g. "Kapoor's") are excluded
 //     from every metric -- no revenue, no cost.
-//   * Revenue = sum over SOLD lines of round(actual qty x locked price), the
+//   * Revenue = sum over SOLD lines of round(billed qty x locked price), the
 //     same per-line rounding the WhatsApp bill uses (roundLineAmount). A sold
 //     line has actual_qty > 0 and is not marked unavailable.
 //   * Costs: COGS = actual qty x locked COGS per unit (sold lines); packaging,
@@ -22,7 +22,8 @@ import { roundLineAmount, roundToCents } from "@/lib/billing/compute";
 
 export interface MLine {
   productId: string | null;
-  actualQty: number | null;
+  actualQty: number | null; // packed; COGS
+  billedQty?: number | null; // billed; revenue (null = same as packed)
   price: number | null;
   cogsPerUnit: number | null;
   packaging: number | null;
@@ -159,7 +160,7 @@ export function orderEconomics(o: MOrder): OrderEconomics {
     if (!isSold(l)) continue;
     soldLines++;
     if (l.isGiftBox) hasGiftLine = true;
-    if (l.price !== null) revenue += roundLineAmount(l.actualQty!, l.price);
+    if (l.price !== null) revenue += roundLineAmount(l.billedQty ?? l.actualQty!, l.price);
     if (l.cogsPerUnit !== null) cogs += (l.actualQty ?? 0) * l.cogsPerUnit;
   }
   return {
@@ -512,7 +513,7 @@ export function breakdowns(snap: Snapshot, range: DateRange): Breakdowns {
       if (isSold(l)) {
         row.soldLines++;
         row.customerSet.add(o.customerId);
-        if (l.price !== null) row.revenue += roundLineAmount(l.actualQty!, l.price);
+        if (l.price !== null) row.revenue += roundLineAmount(l.billedQty ?? l.actualQty!, l.price);
         if (l.cogsPerUnit !== null) { row.cogs += (l.actualQty ?? 0) * l.cogsPerUnit; row.costedSold++; }
         soldIds.add(id);
         const free = freeKind(l, row.name);
