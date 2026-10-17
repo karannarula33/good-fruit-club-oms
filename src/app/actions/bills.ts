@@ -383,8 +383,10 @@ export async function overrideLineQuantity(
   newQty: number,
   reason: string,
 ): Promise<OverrideLineQuantityResult> {
-  const profile = await requireRole(["admin"]);
-  const supabase = await createClient();
+  // Admin, or a packer with billing access correcting a weight before
+  // generating the bill (no RLS insert on quantity_overrides for packers).
+  const { profile, isAdmin } = await requireBillingAccess();
+  const supabase = isAdmin ? await createClient() : createServiceRoleClient();
 
   const { data: line, error: lineError } = await supabase
     .from("order_lines")

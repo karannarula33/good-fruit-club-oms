@@ -149,7 +149,7 @@ export default async function PackerPage({
     })
     .filter((order) => order.lines.length > 0);
 
-  const substituteProducts = (products ?? []).map((p) => ({ id: p.id, name: p.name }));
+  const substituteProducts = (products ?? []).map((p) => ({ id: p.id, name: p.name, unitLabel: p.unit_label }));
 
   return (
     <div className="px-[18px] pt-5 pb-4">

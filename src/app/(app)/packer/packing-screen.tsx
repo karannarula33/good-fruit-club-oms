@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, useMotionValue, useTransform, type PanInfo } from "motion/react";
-import { ChevronLeft, PackageCheck, Ban, MessageCircle, XCircle, Pencil } from "lucide-react";
+import { ChevronLeft, PackageCheck, Ban, MessageCircle, XCircle, Pencil, Plus, Trash2 } from "lucide-react";
 import { finalizeOrder } from "@/app/actions/packing";
 import { generateBill, overrideLinePrice, overrideLineQuantity } from "@/app/actions/bills";
+import { addPackedLine, removePackedLine } from "@/app/actions/packed-edit";
 import { updateCustomerSalutation } from "@/app/actions/customers";
 import { toWhatsAppDigits } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
@@ -151,7 +152,7 @@ function EditableDetail({
   onFinalized,
 }: {
   order: PackingOrder;
-  products: { id: string; name: string }[];
+  products: { id: string; name: string; unitLabel?: string | null }[];
   onBack: () => void;
   onFinalized: () => void;
 }) {
@@ -531,10 +532,220 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
   );
 }
 
+// Billing packer's line at the billing step: weight/count can be corrected
+// and the item removed -- no prices anywhere (src/lib/auth/billing-access.ts).
+function PackerBillLineRow({ orderId, line, onChanged }: { orderId: string; line: PackingLine; onChanged: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const [qtyInput, setQtyInput] = useState("");
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const qty = line.actualQty ?? 0;
+
+  function handleSave() {
+    const newQty = Number(qtyInput);
+    if (!Number.isFinite(newQty) || newQty <= 0) {
+      setError("Enter a quantity greater than zero.");
+      return;
+    }
+    if (newQty === qty) {
+      setEditing(false);
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const result = await overrideLineQuantity(line.id, newQty, "Corrected at billing");
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setEditing(false);
+      onChanged();
+    });
+  }
+
+  function handleRemove() {
+    if (!confirmRemove) {
+      setConfirmRemove(true);
+      setTimeout(() => setConfirmRemove(false), 3000);
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const result = await removePackedLine(orderId, line.id);
+      if (!result.ok) {
+        setError(result.error);
+        setConfirmRemove(false);
+        return;
+      }
+      onChanged();
+    });
+  }
+
+  return (
+    <Card elevated className="!space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-sans text-sm font-bold text-foreground">{line.productName}</div>
+          {!editing && (
+            <div className="font-sans text-[12.5px] font-semibold text-muted">
+              {line.actualQty ?? "—"} {line.unitLabel ?? ""}
+            </div>
+          )}
+        </div>
+        {!editing && (
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => {
+                setQtyInput(qty ? String(qty) : "");
+                setError(null);
+                setEditing(true);
+              }}
+              aria-label={`Edit quantity for ${line.productName}`}
+              className="rounded-full p-2 text-muted disabled:opacity-40"
+            >
+              <Pencil className="size-4" />
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={handleRemove}
+              aria-label={`Remove ${line.productName}`}
+              className={confirmRemove ? "rounded-full bg-danger-bg px-2 py-1 font-sans text-[11px] font-bold text-danger-text" : "rounded-full p-2 text-muted disabled:opacity-40"}
+            >
+              {confirmRemove ? "Remove?" : <Trash2 className="size-4" />}
+            </button>
+          </div>
+        )}
+      </div>
+      {editing && (
+        <div className="flex items-center gap-2">
+          <Input
+            size="lg"
+            type="number"
+            inputMode={line.unitType === "weight" ? "decimal" : "numeric"}
+            step={line.unitType === "weight" ? "0.001" : "1"}
+            min="0"
+            autoFocus
+            value={qtyInput}
+            onChange={(e) => setQtyInput(e.target.value)}
+            className="w-28"
+          />
+          <span className="font-sans text-[12.5px] font-semibold text-muted">{line.unitLabel ?? ""}</span>
+          <div className="ml-auto flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setEditing(false)} disabled={pending}>
+              Cancel
+            </Button>
+            <Button variant="dark" size="sm" onClick={handleSave} pending={pending} pendingText="Saving…">
+              Save
+            </Button>
+          </div>
+        </div>
+      )}
+      {error && <FormError>{error}</FormError>}
+    </Card>
+  );
+}
+
+function PackerAddItem({
+  orderId,
+  products,
+  onChanged,
+}: {
+  orderId: string;
+  products: { id: string; name: string; unitLabel?: string | null }[];
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [productId, setProductId] = useState("");
+  const [qty, setQty] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const unit = products.find((p) => p.id === productId)?.unitLabel ?? "";
+
+  function handleAdd() {
+    const n = Number(qty);
+    if (!productId) {
+      setError("Pick an item.");
+      return;
+    }
+    if (!Number.isFinite(n) || n <= 0) {
+      setError("Enter a quantity greater than zero.");
+      return;
+    }
+    setError(null);
+    startTransition(async () => {
+      const result = await addPackedLine(orderId, productId, n);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setOpen(false);
+      setProductId("");
+      setQty("");
+      onChanged();
+    });
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-neutral-300 py-2.5 font-sans text-[12.5px] font-bold text-muted dark:border-neutral-700"
+      >
+        <Plus className="size-4" aria-hidden="true" />
+        Add item
+      </button>
+    );
+  }
+  return (
+    <Card elevated className="!space-y-2">
+      <select
+        value={productId}
+        onChange={(e) => setProductId(e.target.value)}
+        className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 font-sans text-sm dark:border-neutral-700 dark:bg-neutral-900"
+      >
+        <option value="">Pick an item…</option>
+        {products.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <div className="flex items-center gap-2">
+        <Input
+          size="lg"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          placeholder="Qty"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          className="w-28"
+        />
+        <span className="font-sans text-[12.5px] font-semibold text-muted">{unit}</span>
+      </div>
+      {error && <FormError>{error}</FormError>}
+      <div className="flex gap-2">
+        <Button variant="secondary" fullWidth onClick={() => setOpen(false)} disabled={pending}>
+          Cancel
+        </Button>
+        <Button variant="dark" fullWidth onClick={handleAdd} pending={pending} pendingText="Adding…">
+          Add
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
 function PackedDetail({
   order,
   isAdmin,
   canGenerateBills,
+  products,
   onBack,
   onBillGenerated,
 }: {
@@ -543,6 +754,7 @@ function PackedDetail({
   // A packer with billing access (src/lib/auth/billing-access.ts): may
   // generate the bill, but sees no prices and never gets the send button.
   canGenerateBills: boolean;
+  products: { id: string; name: string; unitLabel?: string | null }[];
   onBack: () => void;
   onBillGenerated: (bill: { messageText: string; customerPhone: string | null; paymentLinkError?: string }) => void;
 }) {
@@ -638,6 +850,14 @@ function PackedDetail({
           {packagingSummary && (
             <div className="font-sans text-[12.5px] font-semibold text-muted">{packagingSummary}</div>
           )}
+          {canGenerateBills && !order.hasBill ? (
+            <div className="flex flex-col gap-2">
+              {packedLines.map((line) => (
+                <PackerBillLineRow key={line.id} orderId={order.id} line={line} onChanged={() => router.refresh()} />
+              ))}
+              <PackerAddItem orderId={order.id} products={products} onChanged={() => router.refresh()} />
+            </div>
+          ) : (
           <div className="flex flex-col gap-2">
             {packedLines.map((line) => (
               <Card key={line.id} elevated className="flex items-center justify-between !space-y-0">
@@ -648,6 +868,7 @@ function PackedDetail({
               </Card>
             ))}
           </div>
+          )}
           {canGenerateBills && !order.hasBill && (
             <>
               {error && <FormError>{error}</FormError>}
@@ -750,7 +971,7 @@ export function PackingScreen({
 }: {
   date: string;
   orders: PackingOrder[];
-  products: { id: string; name: string }[];
+  products: { id: string; name: string; unitLabel?: string | null }[];
   isAdmin: boolean;
   canGenerateBills?: boolean;
 }) {
@@ -859,6 +1080,7 @@ export function PackingScreen({
                 order={activeOrder}
                 isAdmin={isAdmin}
                 canGenerateBills={canGenerateBills}
+                products={products}
                 onBack={backToQueue}
                 onBillGenerated={handleBillGenerated}
               />
