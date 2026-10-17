@@ -534,11 +534,15 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
 function PackedDetail({
   order,
   isAdmin,
+  canGenerateBills,
   onBack,
   onBillGenerated,
 }: {
   order: PackingOrder;
   isAdmin: boolean;
+  // A packer with billing access (src/lib/auth/billing-access.ts): may
+  // generate the bill, but sees no prices and never gets the send button.
+  canGenerateBills: boolean;
   onBack: () => void;
   onBillGenerated: (bill: { messageText: string; customerPhone: string | null; paymentLinkError?: string }) => void;
 }) {
@@ -554,7 +558,11 @@ function PackedDetail({
     const result = await generateBill(order.id);
     if (!result.ok) {
       if (result.reason === "unpriced") {
-        setError(`${result.unpricedLineCount} item(s) still need a price.`);
+        setError(
+          isAdmin
+            ? `${result.unpricedLineCount} item(s) still need a price.`
+            : `${result.unpricedLineCount} item(s) have no price yet — ask the admin to add it, then generate the bill.`,
+        );
       } else if (result.reason === "salutation_needed") {
         setNeedsSalutation(true);
       } else {
@@ -621,7 +629,11 @@ function PackedDetail({
       ) : (
         <>
           <div className="font-sans text-[11px] font-bold uppercase tracking-wide text-muted">
-            Packed — waiting on admin to bill
+            {order.hasBill
+              ? "Billed — admin will send the bill"
+              : canGenerateBills
+                ? "✓ Packed — ready to bill"
+                : "Packed — waiting on admin to bill"}
           </div>
           {packagingSummary && (
             <div className="font-sans text-[12.5px] font-semibold text-muted">{packagingSummary}</div>
@@ -636,6 +648,30 @@ function PackedDetail({
               </Card>
             ))}
           </div>
+          {canGenerateBills && !order.hasBill && (
+            <>
+              {error && <FormError>{error}</FormError>}
+              {needsSalutation ? (
+                <div className="space-y-2 rounded-2xl bg-warning-bg p-3.5">
+                  <div className="font-sans text-[12.5px] font-semibold text-warning-text">
+                    Couldn&apos;t tell from the name — pick one:
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="secondary" fullWidth disabled={pending} onClick={() => handlePickSalutation("Sir")}>
+                      Sir
+                    </Button>
+                    <Button variant="secondary" fullWidth disabled={pending} onClick={() => handlePickSalutation("Ma'am")}>
+                      Ma&apos;am
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button variant="primary" fullWidth onClick={handleGenerateBill} pending={pending} pendingText="Generating…">
+                  Generate Bill →
+                </Button>
+              )}
+            </>
+          )}
         </>
       )}
     </div>
@@ -710,11 +746,13 @@ export function PackingScreen({
   orders,
   products,
   isAdmin,
+  canGenerateBills = false,
 }: {
   date: string;
   orders: PackingOrder[];
   products: { id: string; name: string }[];
   isAdmin: boolean;
+  canGenerateBills?: boolean;
 }) {
   const router = useRouter();
   const isToday = date === utcToIstDatetimeLocal(new Date()).slice(0, 10);
@@ -747,6 +785,13 @@ export function PackingScreen({
     router.refresh();
   }
   function handleBillGenerated(b: { messageText: string; customerPhone: string | null; paymentLinkError?: string }) {
+    if (!isAdmin) {
+      // Billing packer: the bill exists, the admin sends it.
+      showToast("Bill generated ✓ — admin will send it");
+      backToQueue();
+      router.refresh();
+      return;
+    }
     setBill(b);
     setView("bill");
   }
@@ -810,7 +855,13 @@ export function PackingScreen({
               <EditableDetail order={activeOrder} products={products} onBack={backToQueue} onFinalized={handleFinalized} />
             )}
             {activeOrder.status === "packed" && (
-              <PackedDetail order={activeOrder} isAdmin={isAdmin} onBack={backToQueue} onBillGenerated={handleBillGenerated} />
+              <PackedDetail
+                order={activeOrder}
+                isAdmin={isAdmin}
+                canGenerateBills={canGenerateBills}
+                onBack={backToQueue}
+                onBillGenerated={handleBillGenerated}
+              />
             )}
             {activeOrder.status === "cancelled" && <CancelledDetail order={activeOrder} onBack={backToQueue} />}
           </motion.div>

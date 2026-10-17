@@ -2,8 +2,10 @@
 
 import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, MessageCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { addOrderLine, deleteOrder, deleteOrderLine, updateOrderLineQty } from "@/app/actions/manage-orders";
+import { addBilledLine, editBilledLine, getBillMessage, removeBilledLine, type BillEditResult } from "@/app/actions/bill-edit";
+import { toWhatsAppDigits } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,6 +30,7 @@ export interface ManageOrderLine {
   orderedQty: number | null;
   orderedUnit: string | null;
   actualQty: number | null;
+  rate: number | null;
   lineStatus: LineStatus;
 }
 
@@ -38,6 +41,7 @@ export interface ManageOrderRow {
   hasBill: boolean;
   billTotal: number | null;
   editable: boolean;
+  billEditable: boolean;
   lines: ManageOrderLine[];
   packagingSummary: string | null;
 }
@@ -75,6 +79,10 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
 
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editingQty, setEditingQty] = useState("");
+  const [editingRate, setEditingRate] = useState("");
+  // The current bill text after an edit (or on "Send bill"), with the wa.me button.
+  const [billView, setBillView] = useState<Extract<BillEditResult, { ok: true }> | null>(null);
+  const [billLoading, setBillLoading] = useState(false);
   const [savingLineId, setSavingLineId] = useState<string | null>(null);
   // Optimistic display of a just-saved qty, since these rows are server-fetched props.
   const [qtyOverrideByLineId, setQtyOverrideByLineId] = useState<Map<string, number>>(new Map());
@@ -82,6 +90,7 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
   const [addingLine, setAddingLine] = useState(false);
   const [newProductId, setNewProductId] = useState("");
   const [newQty, setNewQty] = useState("");
+  const [newRate, setNewRate] = useState("");
   const [addSaving, setAddSaving] = useState(false);
 
   const openOrder = rows.find((r) => r.id === openOrderId) ?? null;
@@ -100,6 +109,34 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
     setAddingLine(false);
     setNewProductId("");
     setNewQty("");
+    setNewRate("");
+    setBillView(null);
+  }
+
+  // After a billed order is edited: show the rebuilt bill, ready to resend.
+  function applyBillResult(result: BillEditResult, toast: string): boolean {
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    setBillView(result);
+    showToast(`${toast} — bill updated to ₹${result.total} ✓`);
+    router.refresh();
+    return true;
+  }
+
+  function handleShowBill(orderId: string) {
+    setError(null);
+    setBillLoading(true);
+    startTransition(async () => {
+      const result = await getBillMessage(orderId);
+      setBillLoading(false);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setBillView(result);
+    });
   }
 
   function handleDeleteLine(orderId: string, lineId: string) {
@@ -110,6 +147,14 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
     setConfirming(null);
     setError(null);
     setDeletingKey(lineId);
+    if (openOrder?.billEditable) {
+      startTransition(async () => {
+        const result = await removeBilledLine(orderId, lineId);
+        setDeletingKey(null);
+        applyBillResult(result, "Item removed");
+      });
+      return;
+    }
     startTransition(async () => {
       const result = await deleteOrderLine(orderId, lineId);
       setDeletingKey(null);
@@ -146,6 +191,7 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
   function startEditQty(line: ManageOrderLine, currentQty: number | null) {
     setEditingLineId(line.id);
     setEditingQty(currentQty !== null ? String(currentQty) : "");
+    setEditingRate(line.rate !== null ? String(line.rate) : "");
     setError(null);
   }
 
@@ -161,6 +207,20 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
       return;
     }
     setError(null);
+    if (openOrder?.billEditable) {
+      const rate = Number(editingRate);
+      if (!Number.isFinite(rate) || rate <= 0) {
+        setError("Enter a rate greater than zero.");
+        return;
+      }
+      setSavingLineId(lineId);
+      startTransition(async () => {
+        const result = await editBilledLine(orderId, lineId, { qty, price: rate });
+        setSavingLineId(null);
+        if (applyBillResult(result, "Item updated")) setEditingLineId(null);
+      });
+      return;
+    }
     setSavingLineId(lineId);
     startTransition(async () => {
       const result = await updateOrderLineQty(orderId, lineId, qty);
@@ -188,6 +248,25 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
     }
     const product = products.find((p) => p.id === newProductId);
     setError(null);
+    if (openOrder?.billEditable) {
+      const rate = Number(newRate);
+      if (!Number.isFinite(rate) || rate <= 0) {
+        setError("Enter a rate greater than zero.");
+        return;
+      }
+      setAddSaving(true);
+      startTransition(async () => {
+        const result = await addBilledLine(orderId, newProductId, qty, rate);
+        setAddSaving(false);
+        if (applyBillResult(result, "Item added")) {
+          setAddingLine(false);
+          setNewProductId("");
+          setNewQty("");
+          setNewRate("");
+        }
+      });
+      return;
+    }
     setAddSaving(true);
     startTransition(async () => {
       const result = await addOrderLine(orderId, newProductId, qty, product?.unitLabel ?? null);
@@ -254,7 +333,14 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
               <div className="font-sans text-[12.5px] font-semibold text-tertiary">{openOrder.packagingSummary}</div>
             )}
 
-            {!openOrder.editable && (
+            {openOrder.billEditable && (
+              <div className="rounded-2xl bg-warning-bg px-3.5 py-2.5 font-sans text-[12.5px] font-semibold text-warning-text">
+                Billed ₹{openOrder.billTotal?.toFixed(2)}. Any change here updates the bill, the customer&apos;s balance
+                and the payment link — send the updated bill after.
+              </div>
+            )}
+
+            {!openOrder.editable && !openOrder.billEditable && (
               <FormError>
                 {openOrder.hasBill
                   ? "Already billed — can't be edited or deleted."
@@ -267,6 +353,8 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
                 const qty = qtyOverrideByLineId.get(line.id) ?? displayQty(line);
                 const isEditing = editingLineId === line.id;
                 const product = products.find((p) => p.name === line.productName);
+                // On a billed order only items still on the bill can change.
+                const locked = openOrder.billEditable ? line.lineStatus !== "packed" : !openOrder.editable;
                 return (
                   <div key={line.id} className="flex items-center gap-3 rounded-2xl bg-neutral-bg px-3.5 py-3">
                     <div className="min-w-0 flex-1">
@@ -287,6 +375,34 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
                           <span className="font-sans text-[11.5px] font-semibold text-muted">
                             {line.orderedUnit ?? line.unitLabel ?? ""}
                           </span>
+                          {openOrder.billEditable && (
+                            <>
+                              <span className="font-sans text-[11.5px] font-semibold text-muted">× ₹</span>
+                              <Input
+                                size="sm"
+                                type="number"
+                                inputMode="decimal"
+                                min={0}
+                                value={editingRate}
+                                onChange={(e) => setEditingRate(e.target.value)}
+                                className="w-20"
+                                aria-label="Rate"
+                              />
+                            </>
+                          )}
+                        </div>
+                      ) : openOrder.billEditable ? (
+                        <div className="font-sans text-[11.5px] font-semibold text-muted">
+                          {line.lineStatus === "packed" ? (
+                            <>
+                              {qty} {line.unitLabel ?? line.orderedUnit ?? ""} × ₹{line.rate ?? "—"}
+                              {line.rate !== null && qty !== null && (
+                                <span className="ml-1 text-foreground">= ₹{Math.round(qty * line.rate)}</span>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-tertiary">Not on the bill</span>
+                          )}
                         </div>
                       ) : (
                         <div className="font-sans text-[11.5px] font-semibold text-muted">
@@ -319,7 +435,7 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
                       <div className="flex shrink-0 items-center gap-1">
                         <button
                           type="button"
-                          disabled={!openOrder.editable || deletingKey !== null}
+                          disabled={locked || deletingKey !== null}
                           onClick={() => startEditQty(line, qty)}
                           className="rounded-full p-2 text-muted hover:bg-white disabled:opacity-40"
                         >
@@ -327,7 +443,7 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
                         </button>
                         <button
                           type="button"
-                          disabled={!openOrder.editable || deletingKey !== null}
+                          disabled={locked || deletingKey !== null}
                           onClick={() => handleDeleteLine(openOrder.id, line.id)}
                           className={cn(
                             "rounded-full p-2 disabled:opacity-40",
@@ -379,6 +495,21 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
                   <span className="font-sans text-[11.5px] font-semibold text-muted">
                     {products.find((p) => p.id === newProductId)?.unitLabel ?? ""}
                   </span>
+                  {openOrder.billEditable && (
+                    <>
+                      <span className="font-sans text-[11.5px] font-semibold text-muted">× ₹</span>
+                      <Input
+                        size="sm"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        placeholder="Rate"
+                        value={newRate}
+                        onChange={(e) => setNewRate(e.target.value)}
+                        className="w-20"
+                      />
+                    </>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" pending={addSaving} onClick={() => handleAddLine(openOrder.id)}>
@@ -392,6 +523,7 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
                       setAddingLine(false);
                       setNewProductId("");
                       setNewQty("");
+                      setNewRate("");
                       setError(null);
                     }}
                   >
@@ -402,7 +534,7 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
             ) : (
               <button
                 type="button"
-                disabled={!openOrder.editable}
+                disabled={!openOrder.editable && !openOrder.billEditable}
                 onClick={() => setAddingLine(true)}
                 className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-neutral-300 py-2.5 font-sans text-[12.5px] font-bold text-muted disabled:opacity-40 dark:border-neutral-700"
               >
@@ -412,6 +544,35 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
             )}
 
             {error && <FormError>{error}</FormError>}
+
+            {openOrder.billEditable &&
+              (billView ? (
+                <div className="flex flex-col gap-2 rounded-2xl bg-neutral-bg px-3.5 py-3">
+                  {billView.paymentLinkError && (
+                    <FormError>Razorpay link couldn&apos;t be made ({billView.paymentLinkError}), so this bill has no link.</FormError>
+                  )}
+                  <div className="whitespace-pre-wrap font-sans text-[12.5px] leading-[1.6] text-foreground">
+                    {billView.messageText}
+                  </div>
+                  {billView.customerPhone ? (
+                    <a
+                      href={`https://wa.me/${toWhatsAppDigits(billView.customerPhone)}?text=${encodeURIComponent(billView.messageText)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-1.5 rounded-2xl bg-success py-2.5 font-sans text-[13px] font-bold text-white"
+                    >
+                      <MessageCircle className="size-4" aria-hidden="true" />
+                      Send bill on WhatsApp
+                    </a>
+                  ) : (
+                    <FormError>No phone number on file for this customer — send the bill manually.</FormError>
+                  )}
+                </div>
+              ) : (
+                <Button variant="secondary" fullWidth pending={billLoading} onClick={() => handleShowBill(openOrder.id)}>
+                  View / send bill
+                </Button>
+              ))}
 
             <Button
               variant="destructive"

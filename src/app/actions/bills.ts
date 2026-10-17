@@ -2,6 +2,8 @@
 
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { requireBillingAccess } from "@/lib/auth/billing-access";
 import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
 import { resolveBillLinePrices } from "@/lib/billing/resolve-line-prices";
 import { computeBillTotal, computeCustomerBalance, computeNetDue, roundLineAmount } from "@/lib/billing/compute";
@@ -20,12 +22,28 @@ export type GenerateBillResult =
   | { ok: false; reason: "salutation_needed" }
   | { ok: false; reason: "error"; error: string };
 
-// Admin-only: packing and billing are two separately-triggered steps
-// (packing-screen.tsx) -- a packer marks an order packed, an admin
-// separately reviews the priced line items and generates the bill.
+// Packing and billing are two separately-triggered steps (packing-screen.tsx)
+// -- a packer marks an order packed, then an admin (or a packer with billing
+// access, src/lib/auth/billing-access.ts) generates the bill.
+//
+// A billing packer has no RLS access to prices, bills or the ledger, so their
+// bill is generated with the service-role client, and what comes back to them
+// is stripped of the bill text and phone: they never see amounts and can't
+// send it. The admin opens the same order later to send it (generating again
+// returns the existing bill).
 export async function generateBill(orderId: string): Promise<GenerateBillResult> {
-  const profile = await requireRole(["admin"]);
-  const supabase = await createClient();
+  const { profile, isAdmin } = await requireBillingAccess();
+  const supabase = isAdmin ? await createClient() : createServiceRoleClient();
+  const result = await generateBillWith(supabase, profile, orderId);
+  if (!isAdmin && result.ok) return { ok: true, messageText: "", customerPhone: null, paymentLinkError: result.paymentLinkError };
+  return result;
+}
+
+async function generateBillWith(
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createServiceRoleClient>,
+  profile: { id: string },
+  orderId: string,
+): Promise<GenerateBillResult> {
 
   const { data: order, error: orderError } = await supabase
     .from("orders")

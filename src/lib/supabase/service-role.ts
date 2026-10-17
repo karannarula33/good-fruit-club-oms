@@ -2,7 +2,10 @@
 // scripts) -- bypasses RLS, never import this from app code. Two
 // exceptions: the Razorpay webhook (src/app/api/razorpay/webhook/route.ts),
 // which has no signed-in user and authenticates by request signature, and
-// read-only price lookups when a packer saves an order (src/app/actions/orders.ts).
+// read-only price lookups when a packer saves an order (src/app/actions/orders.ts),
+// bill generation by a packer with billing access (src/app/actions/bills.ts,
+// src/lib/auth/billing-access.ts), and admin edits to a billed order, which
+// rewrite the append-only bill/ledger rows (src/app/actions/bill-edit.ts).
 
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";

@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { requireBillingAccess } from "@/lib/auth/billing-access";
 import { ZONE_ORDER } from "@/lib/customers/zone";
 import type { CustomerZone, PaymentMode, Salutation } from "@/lib/supabase/database.types";
 
@@ -68,13 +70,15 @@ export async function updateCustomerSalutation(
   customerId: string,
   salutation: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireRole(["admin"]);
+  // A packer with billing access hits the same Sir/Ma'am picker at billing
+  // time; they have no RLS write on customers, hence the service-role client.
+  const { isAdmin } = await requireBillingAccess();
 
   if (!VALID_SALUTATIONS.includes(salutation as Salutation)) {
     return { ok: false, error: `Unknown salutation: ${salutation}` };
   }
 
-  const supabase = await createClient();
+  const supabase = isAdmin ? await createClient() : createServiceRoleClient();
   const { error } = await supabase
     .from("customers")
     .update({ salutation: salutation as Salutation })

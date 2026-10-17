@@ -44,7 +44,7 @@ export default async function ManageOrdersPage({
     orderIds.length
       ? supabase
           .from("order_lines")
-          .select("id, order_id, product_id, ordered_qty, ordered_unit, actual_qty, line_status, package_id")
+          .select("id, order_id, product_id, ordered_qty, ordered_unit, actual_qty, locked_price_per_unit, line_status, package_id")
           .in("order_id", orderIds)
       : Promise.resolve({ data: [] }),
     supabase.from("products").select("id, name, unit_label"),
@@ -75,6 +75,7 @@ export default async function ManageOrdersPage({
       ordered_qty: number | null;
       ordered_unit: string | null;
       actual_qty: number | null;
+      locked_price_per_unit: number | null;
       line_status: LineStatus;
     }[]
   >();
@@ -95,6 +96,7 @@ export default async function ManageOrdersPage({
         orderedQty: line.ordered_qty,
         orderedUnit: line.ordered_unit,
         actualQty: line.actual_qty,
+        rate: line.locked_price_per_unit,
         lineStatus: line.line_status,
       };
     });
@@ -105,6 +107,9 @@ export default async function ManageOrdersPage({
       hasBill: billByOrderId.has(order.id),
       billTotal: billByOrderId.get(order.id) ?? null,
       editable: isOrderStatusEditable(order.status as OrderStatus) && !billByOrderId.has(order.id),
+      // Billed orders stay editable for the admin; each edit rebuilds the bill
+      // (src/app/actions/bill-edit.ts).
+      billEditable: billByOrderId.has(order.id) && order.status !== "cancelled",
       lines,
       packagingSummary: packagingSummaryByOrderId.get(order.id) || null,
     };

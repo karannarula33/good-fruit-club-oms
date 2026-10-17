@@ -1,4 +1,5 @@
 import { requireRole } from "@/lib/auth/require-role";
+import { getBillingAccess } from "@/lib/auth/billing-access";
 import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
@@ -13,6 +14,7 @@ export default async function PackerPage({
   searchParams: Promise<{ date?: string }>;
 }) {
   const profile = await requireRole(["packer", "admin"]);
+  const { canGenerateBills } = await getBillingAccess();
 
   const params = await searchParams;
   const date = params.date ?? utcToIstDatetimeLocal(new Date()).slice(0, 10);
@@ -160,6 +162,7 @@ export default async function PackerPage({
         orders={packingOrders}
         products={substituteProducts}
         isAdmin={profile.role === "admin"}
+        canGenerateBills={canGenerateBills}
       />
     </div>
   );
