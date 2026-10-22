@@ -14,6 +14,7 @@ import { planAdvanceAllocation, type AdvanceCredit } from "@/lib/billing/allocat
 import { validatePriceOverride, validateQuantityOverride } from "@/lib/billing/override";
 import { classifySalutation } from "@/lib/parser/classify-salutation";
 import { billedQuantity, validateBilledQty } from "@/lib/billing/qty";
+import { giftPackingBillLine, giftPackingCharge, loadGiftPackingCount } from "@/lib/billing/gift-packing";
 
 export type GenerateBillResult =
   // paymentLinkError: the bill was made but its Razorpay link couldn't be;
@@ -107,7 +108,7 @@ async function generateBillWith(
 
   const { data: lineRows, error: linesError } = await supabase
     .from("order_lines")
-    .select("id, product_id, actual_qty, billed_qty, locked_price_per_unit, products(name, unit_label)")
+    .select("id, product_id, actual_qty, billed_qty, locked_price_per_unit, package_id, products(name, unit_label)")
     .eq("order_id", orderId)
     .eq("line_status", "packed");
   if (linesError) {
@@ -168,10 +169,14 @@ async function generateBillWith(
     lockedPricePerUnit: effectivePriceForLine(line),
   }));
 
-  const { total, unpricedLineCount } = computeBillTotal(billableLines);
+  const { total: lineTotal, unpricedLineCount } = computeBillTotal(billableLines);
   if (unpricedLineCount > 0) {
     return { ok: false, reason: "unpriced", unpricedLineCount };
   }
+  // ₹400 per gift packing used (src/lib/billing/gift-packing.ts).
+  const gift = await loadGiftPackingCount(supabase, lineRows ?? []);
+  if (gift.error) return { ok: false, reason: "error", error: gift.error };
+  const total = lineTotal + giftPackingCharge(gift.count);
 
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from("ledger_entries")
@@ -197,6 +202,8 @@ async function generateBillWith(
       amount: roundLineAmount(actualQty, ratePerUnit),
     };
   });
+  const giftLine = giftPackingBillLine(gift.count);
+  if (giftLine) billLines.push(giftLine);
 
   // CLAUDE.md §3.7: an existing advance auto-allocates, oldest-first, the
   // next time a bill finalizes -- purely additive bookkeeping for deriving

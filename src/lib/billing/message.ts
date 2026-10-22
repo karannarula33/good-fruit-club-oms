@@ -76,7 +76,7 @@ export function buildBillMessage(params: {
       ? lines
           .map(
             (line) =>
-              `${line.actualQty} ${line.unitLabel ?? ""} ${line.productName} @ ${formatRupees(line.ratePerUnit)} = ${formatRupees(line.amount)}`,
+              `${line.actualQty} ${line.unitLabel ? `${line.unitLabel} ` : ""}${line.productName} @ ${formatRupees(line.ratePerUnit)} = ${formatRupees(line.amount)}`,
           )
           .join("\n")
       : "No items packed";

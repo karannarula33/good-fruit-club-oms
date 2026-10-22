@@ -7,6 +7,7 @@ export const PACKAGING_TYPES: { value: PackagingType; label: string }[] = [
   { value: "small_packet", label: "Small Packet" },
   { value: "big_packet", label: "Big Packet" },
   { value: "tiny_box", label: "Tiny Box" },
+  { value: "gift_packing", label: "Gift Packing" },
 ];
 
 export const PACKAGING_LABEL: Record<PackagingType, string> = Object.fromEntries(
@@ -24,6 +25,7 @@ export const PACKAGING_CODE: Record<PackagingType, string> = {
   small_packet: "SP",
   big_packet: "BP",
   tiny_box: "T",
+  gift_packing: "G",
 };
 
 function groupPackagesByType(packages: { packagingType: PackagingType }[]): { type: PackagingType; count: number }[] {
@@ -89,7 +91,8 @@ export function summarizePackaging(packages: { packagingType: PackagingType }[])
   return groupPackagesByType(packages)
     .map(({ type, count }) => {
       const label = PACKAGING_LABEL[type];
-      const plural = count === 1 ? label : label.endsWith("x") ? `${label}es` : `${label}s`;
+      const plural =
+        count === 1 || type === "gift_packing" ? label : label.endsWith("x") ? `${label}es` : `${label}s`;
       return `${count} ${plural}`;
     })
     .join(", ");

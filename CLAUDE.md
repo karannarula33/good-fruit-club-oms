@@ -47,6 +47,7 @@ Example: an 11:00 order gets the morning price list and tomorrow's delivery date
 - The order captures **intent**: product + ordered quantity.
 - The bill is computed from **actuals** recorded at packing: actual weight (weight-based products) or actual count (count-based products) × the order's locked unit price.
 - **Billed qty (added 2026-10-17):** each line also has `billed_qty` — what the customer is billed for. It defaults to the packed `actual_qty` (null = same) until the billing person edits it before generating the bill. Bills, bill edits and dashboard revenue use the billed qty; COGS always uses the packed qty. The admin can change both; a billing packer (Kunal) only the billed qty. Rules in `src/lib/billing/qty.ts`, migration 0036.
+- **Gift packing (added 2026-10-22):** "Gift Packing" is a packaging option at packing (migration 0037). Each gift packing that holds a packed item adds ₹400 to the bill as its own line (`src/lib/billing/gift-packing.ts`), in the total, net due and ledger debit; bill edits keep it.
 - Packing must support, per line: enter actual weight/count; **mark unavailable** (drops line from bill); **substitute** (see 3.4); **short-fulfil** (actual < ordered is normal, no special handling — the actual is simply what's billed).
 
 ### 3.4 Substitutions

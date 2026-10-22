@@ -25,4 +25,14 @@ describe("summarizePackaging", () => {
       ]),
     ).toBe("2 Big Boxes, 1 Tiny Box");
   });
+
+  it("keeps gift packing unpluralized and lists it last", () => {
+    expect(
+      summarizePackaging([
+        { packagingType: "gift_packing" },
+        { packagingType: "gift_packing" },
+        { packagingType: "medium_box" },
+      ]),
+    ).toBe("1 Medium Box, 2 Gift Packing");
+  });
 });

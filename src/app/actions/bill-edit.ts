@@ -16,6 +16,7 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { computeBillTotal, computeNetDue, roundLineAmount, roundToCents } from "@/lib/billing/compute";
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
+import { giftPackingBillLine, giftPackingCharge, loadGiftPackingCount } from "@/lib/billing/gift-packing";
 import { unpaidForOrder } from "@/lib/billing/payment-link";
 import { cancelPaymentLink, createPaymentLink, paymentLinksEnabled } from "@/lib/razorpay/payment-links";
 import { balanceExcludingOrderDebit, planAllocationTrim, validateBillLineEdit, type BillLineEdit } from "@/lib/billing/edit";
@@ -154,16 +155,18 @@ async function rebuildBill(supabase: Client, orderId: string): Promise<BillEditR
 
   const { data: lineRows, error: linesError } = await supabase
     .from("order_lines")
-    .select("id, actual_qty, billed_qty, locked_price_per_unit, products(name, unit_label)")
+    .select("id, actual_qty, billed_qty, locked_price_per_unit, package_id, products(name, unit_label)")
     .eq("order_id", orderId)
     .eq("line_status", "packed");
   if (linesError) return { ok: false, error: linesError.message };
+  const gift = await loadGiftPackingCount(supabase, lineRows ?? []);
+  if (gift.error) return { ok: false, error: gift.error };
 
   const { total: lineTotal, unpricedLineCount } = computeBillTotal(
     (lineRows ?? []).map((l) => ({ actualQty: Number(l.billed_qty ?? l.actual_qty ?? 0), lockedPricePerUnit: l.locked_price_per_unit })),
   );
   if (unpricedLineCount > 0) return { ok: false, error: `${unpricedLineCount} item(s) on this bill have no rate — set one first.` };
-  const total = roundToCents(lineTotal);
+  const total = roundToCents(lineTotal + giftPackingCharge(gift.count));
 
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from("ledger_entries")
@@ -224,6 +227,8 @@ async function rebuildBill(supabase: Client, orderId: string): Promise<BillEditR
     const rate = Number(l.locked_price_per_unit);
     return { productName: product?.name ?? "Item", actualQty: qty, unitLabel: product?.unit_label ?? null, ratePerUnit: rate, amount: roundLineAmount(qty, rate) };
   });
+  const giftLine = giftPackingBillLine(gift.count);
+  if (giftLine) billLines.push(giftLine);
   const messageText = buildBillMessage({
     salutation: customer.salutation === "Sir" ? "Sir" : "Ma'am",
     deliveryDate: order.delivery_date,

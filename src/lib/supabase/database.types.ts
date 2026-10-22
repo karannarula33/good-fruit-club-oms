@@ -25,7 +25,7 @@ export type OrderStatus =
   | "cancelled";
 export type LineStatus = "pending" | "packed" | "unavailable";
 export type OverheadCategory = "ads" | "day_level" | "other";
-export type PackagingType = "big_box" | "medium_box" | "small_box" | "small_packet" | "big_packet" | "tiny_box";
+export type PackagingType = "big_box" | "medium_box" | "small_box" | "small_packet" | "big_packet" | "tiny_box" | "gift_packing";
 export type Salutation = "Sir" | "Ma'am";
 export type PaymentMode = "cod" | "online";
 export type ParseConfidence = "clean" | "flagged";
