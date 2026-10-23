@@ -29,8 +29,9 @@ describe("validatePriceOverride", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("rejects zero or negative prices", () => {
-    expect(validatePriceOverride({ ...base, newPrice: 0 }).ok).toBe(false);
+  it("allows a ₹0 price (free replacement) but rejects negative prices", () => {
+    expect(validatePriceOverride({ ...base, newPrice: 0 }).ok).toBe(true); // free replacement
+    expect(validatePriceOverride({ ...base, newPrice: -1 }).ok).toBe(false);
     expect(validatePriceOverride({ ...base, newPrice: -5 }).ok).toBe(false);
   });
 

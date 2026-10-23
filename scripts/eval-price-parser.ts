@@ -14,6 +14,7 @@ interface ExpectedItem {
   price: number | null;
   confidence: "clean" | "flagged";
   flag_reason?: "unknown_product" | "vague_price" | "ambiguous_unit" | null;
+  half_kg_price?: number | null;
 }
 
 interface Fixture {
@@ -54,6 +55,9 @@ async function main() {
       }
       if (actual.confidence !== expected.confidence) {
         mismatches.push(`confidence: expected ${expected.confidence}, got ${actual.confidence}`);
+      }
+      if (expected.half_kg_price !== undefined && actual.halfKgPrice !== expected.half_kg_price) {
+        mismatches.push(`half_kg_price: expected ${expected.half_kg_price}, got ${actual.halfKgPrice}`);
       }
       if (expected.flag_reason !== undefined && actual.flagReason !== expected.flag_reason) {
         mismatches.push(`flag_reason: expected ${expected.flag_reason}, got ${actual.flagReason}`);

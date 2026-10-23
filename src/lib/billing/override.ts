@@ -22,8 +22,11 @@ export function validatePriceOverride(input: PriceOverrideInput): PriceOverrideV
   if (input.orderStatus !== "packed" || input.lineStatus !== "packed") {
     return { ok: false, error: "This line is no longer eligible for a price override." };
   }
-  if (!Number.isFinite(input.newPrice) || input.newPrice <= 0) {
-    return { ok: false, error: "Price must be greater than zero." };
+  // ₹0 is allowed on purpose (admin, 2026-10-23): a free replacement or
+  // free item is billed at zero, explicitly and with a reason -- unlike an
+  // unpriced line, which still blocks billing (CLAUDE.md §3.2).
+  if (!Number.isFinite(input.newPrice) || input.newPrice < 0) {
+    return { ok: false, error: "Price can't be negative." };
   }
   if (input.reason.trim().length === 0) {
     return { ok: false, error: "A reason is required." };

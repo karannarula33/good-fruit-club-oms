@@ -59,8 +59,9 @@ export function validateBillLineEdit(edit: BillLineEdit): { ok: true } | { ok: f
   if (edit.qty !== undefined && (!Number.isFinite(edit.qty) || edit.qty < 0)) {
     return { ok: false, error: "Quantity can't be negative." };
   }
-  if (edit.price !== undefined && (!Number.isFinite(edit.price) || edit.price <= 0)) {
-    return { ok: false, error: "Rate must be greater than zero." };
+  // ₹0 allowed for free replacements (admin, 2026-10-23).
+  if (edit.price !== undefined && (!Number.isFinite(edit.price) || edit.price < 0)) {
+    return { ok: false, error: "Rate can't be negative." };
   }
   return { ok: true };
 }

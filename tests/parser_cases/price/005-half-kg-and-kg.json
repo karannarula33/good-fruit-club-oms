@@ -1,0 +1,11 @@
+{
+  "raw_paste": "MANGOSTEEN\n₹600 / 500G\n₹1150 / 1KG\n\nTHAI LONGAN\n₹470 / 500G\n₹900 / KG\n\nRED GLOBE GRAPES\n₹290 / 500G\n₹ 540 / KG\n\nUS LEMON\n₹400 / 500G\n\nCHIKOO\n₹350 / KG\n\nAUTUMN ROYAL GRAPES\n₹550 / BOX (500G)",
+  "expected": [
+    { "product_name": "Mangosteen", "price": 1150, "half_kg_price": 600, "confidence": "clean" },
+    { "product_name": "Longan", "price": 900, "half_kg_price": 470, "confidence": "clean" },
+    { "product_name": "Red Globe Grapes", "price": 540, "half_kg_price": 290, "confidence": "clean" },
+    { "product_name": "Imported Lemon", "price": null, "half_kg_price": 400, "confidence": "clean" },
+    { "product_name": "Chikoo", "price": 350, "half_kg_price": null, "confidence": "clean" },
+    { "product_name": "Autumn Royal Grapes", "price": 550, "half_kg_price": null, "confidence": "clean" }
+  ]
+}

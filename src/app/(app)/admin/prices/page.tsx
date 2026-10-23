@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PriceQuickEdit } from "@/components/price-quick-edit";
 import { PricePasteReview } from "./price-paste-review";
+import { itemToPackPrices } from "@/lib/pricing/pack-prices";
 
 export default async function AdminPricesPage() {
   await requireRole(["admin"]);
@@ -24,8 +25,10 @@ export default async function AdminPricesPage() {
 
   const resolved = resolvePrices(priceItems, new Date());
   const tierCountByPriceItemId = new Map<string, number>();
+  const tiersByPriceItemId = new Map<string, { minQty: number; pricePerUnit: number }[]>();
   for (const tier of tierItems) {
     tierCountByPriceItemId.set(tier.priceItemId, (tierCountByPriceItemId.get(tier.priceItemId) ?? 0) + 1);
+    tiersByPriceItemId.set(tier.priceItemId, [...(tiersByPriceItemId.get(tier.priceItemId) ?? []), { minQty: Number(tier.minQty), pricePerUnit: Number(tier.pricePerUnit) }]);
   }
 
   return (
@@ -44,6 +47,7 @@ export default async function AdminPricesPage() {
         {(products ?? []).map((product) => {
           const price = resolved.get(product.id);
           const tierCount = price ? (tierCountByPriceItemId.get(price.priceItemId) ?? 0) : 0;
+          const pack = price ? itemToPackPrices(price.pricePerUnit, tiersByPriceItemId.get(price.priceItemId) ?? []) : null;
           return (
             <Card key={product.id} elevated className="flex items-center justify-between !space-y-0">
               <div>
@@ -51,7 +55,9 @@ export default async function AdminPricesPage() {
                 <div className="font-sans text-[11.5px] font-semibold text-muted">
                   per {product.unit_label ?? product.unit_type}
                   {price && ` · as of ${formatIstDisplay(price.effectiveFrom)}`}
-                  {tierCount > 0 && ` · ${tierCount} tier${tierCount === 1 ? "" : "s"}`}
+                  {pack
+                    ? ` · ₹${pack.halfKgPrice}/500g, ₹${pack.kgPrice}/kg from 0.7 kg`
+                    : tierCount > 0 && ` · ${tierCount} tier${tierCount === 1 ? "" : "s"}`}
                 </div>
               </div>
               <PriceQuickEdit productId={product.id} currentPrice={price?.pricePerUnit ?? null} />

@@ -10,6 +10,7 @@ import { parsePriceList, type ParsedPriceItem } from "@/lib/parser/parse-price-l
 export interface ReviewLine {
   rawText: string;
   price: number | null;
+  halfKgPrice: number | null;
   productId: string | null;
   confidence: "clean" | "flagged";
   flagReason: ParsedPriceItem["flagReason"];
@@ -31,6 +32,7 @@ export async function parsePriceListDraft(
     const lines: ReviewLine[] = result.items.map((item) => ({
       rawText: item.rawText,
       price: item.price,
+      halfKgPrice: item.halfKgPrice,
       productId: item.productId,
       confidence: item.confidence,
       flagReason: item.flagReason,

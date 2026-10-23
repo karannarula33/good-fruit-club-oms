@@ -437,7 +437,7 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
   function startEditing() {
     setPackedInput(packed ? String(packed) : "");
     setBilledInput(String(billed));
-    setPriceInput(price ? String(price) : "");
+    setPriceInput(line.lockedPricePerUnit != null ? String(line.lockedPricePerUnit) : "");
     setReasonInput("");
     setError(null);
     setEditing(true);
@@ -447,7 +447,8 @@ function PackedLineRow({ line, onOverridden }: { line: PackingLine; onOverridden
     setError(null);
     const newPacked = Number(packedInput);
     const newBilled = Number(billedInput);
-    const newPrice = Number(priceInput);
+    // Blank rate = unchanged; an explicit 0 = free (e.g. a free replacement).
+    const newPrice = priceInput.trim() === "" ? price : Number(priceInput);
     const packedChanged = newPacked !== packed;
     const billedChanged = newBilled !== billed;
     const priceChanged = newPrice !== price;

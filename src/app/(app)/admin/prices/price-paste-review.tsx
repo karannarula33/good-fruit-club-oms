@@ -12,6 +12,7 @@ import { Select } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
 import { FormError } from "@/components/ui/form-error";
 import { useToast } from "@/components/ui/toast";
+import { packPricesToItem } from "@/lib/pricing/pack-prices";
 
 type Step = "paste" | "review";
 
@@ -19,6 +20,7 @@ interface CatalogProduct {
   id: string;
   name: string;
   aliases: string[];
+  unitLabel?: string | null;
 }
 
 interface Line extends ReviewLine {
@@ -49,6 +51,11 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
   const [addProductPending, setAddProductPending] = useState<number | null>(null);
 
   const productNameById = new Map(localCatalog.map((product) => [product.id, product.name]));
+  const isKgProduct = (productId: string | null) =>
+    !!productId && (localCatalog.find((p) => p.id === productId)?.unitLabel ?? "").toLowerCase() === "kg";
+  // A line's priced item: kg products may carry a 500g price too (0.7 kg rule).
+  const linePriced = (line: Line) =>
+    packPricesToItem(line.price, isKgProduct(line.productId) ? line.halfKgPrice : null);
 
   async function handleParse(e: React.FormEvent) {
     e.preventDefault();
@@ -93,17 +100,13 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
       setAddProductError((prev) => ({ ...prev, [index]: result.error }));
       return;
     }
-    setLocalCatalog((prev) => [...prev, { id: result.product.id, name: result.product.name, aliases: [] }]);
+    setLocalCatalog((prev) => [...prev, { id: result.product.id, name: result.product.name, aliases: [], unitLabel: line.newProductUnitLabel || null }]);
     updateLine(index, { productId: result.product.id, addingProduct: false });
     showToast(`${result.product.name} added ✓`);
   }
 
-  const canPublish =
-    lines.length > 0 &&
-    lines.every((line) => line.productId && Number.isFinite(line.price) && (line.price ?? 0) > 0);
-  const unresolvedCount = lines.filter(
-    (line) => !line.productId || !Number.isFinite(line.price) || (line.price ?? 0) <= 0,
-  ).length;
+  const canPublish = lines.length > 0 && lines.every((line) => line.productId && linePriced(line));
+  const unresolvedCount = lines.filter((line) => !line.productId || !linePriced(line)).length;
 
   async function handlePublish() {
     setError(null);
@@ -111,7 +114,12 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
     const result = await publishPriceVersion({
       effectiveFromIst: effectiveFromLocal,
       note: note.trim() || null,
-      items: lines.map((line) => ({ productId: line.productId as string, pricePerUnit: line.price as number })),
+      // Every pasted line states the item's whole pricing, so its tiers are
+      // replaced (500g/1 kg tier, or none) rather than carried forward.
+      items: lines.map((line) => {
+        const priced = linePriced(line)!;
+        return { productId: line.productId as string, pricePerUnit: priced.pricePerUnit, tiers: priced.tiers, replaceTiers: true };
+      }),
       newAliases: lines
         .filter((line) => line.originalProductId === null && line.rememberAlias && line.productId)
         .map((line) => ({ productId: line.productId as string, alias: line.aliasText.trim() })),
@@ -268,16 +276,31 @@ export function PricePasteReview({ catalog }: { catalog: CatalogProduct[] }) {
                       </div>
                     )}
                   </div>
-                  <div className="flex shrink-0 items-center gap-1.5">
-                    <span className="font-sans text-sm font-bold text-muted">₹</span>
-                    <Input
-                      className="w-[70px] text-center"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={line.price ?? ""}
-                      onChange={(e) => updateLine(index, { price: e.target.value === "" ? null : Number(e.target.value) })}
-                    />
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    {isKgProduct(line.productId) && (
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-sans text-[11px] font-bold text-muted">500g ₹</span>
+                        <Input
+                          className="w-[70px] text-center"
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={line.halfKgPrice ?? ""}
+                          onChange={(e) => updateLine(index, { halfKgPrice: e.target.value === "" ? null : Number(e.target.value) })}
+                        />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-sans text-[11px] font-bold text-muted">{isKgProduct(line.productId) ? "1 kg ₹" : "₹"}</span>
+                      <Input
+                        className="w-[70px] text-center"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={line.price ?? ""}
+                        onChange={(e) => updateLine(index, { price: e.target.value === "" ? null : Number(e.target.value) })}
+                      />
+                    </div>
                   </div>
                 </Card>
               );

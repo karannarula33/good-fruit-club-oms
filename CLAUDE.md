@@ -42,6 +42,8 @@ Example: an 11:00 order gets the morning price list and tomorrow's delivery date
 - A version **carries forward** unchanged items: publishing only needs the items that changed; resolution for any product = the most recent published price with `effective_from <= placed_at`.
 - Price publishing is itself a paste-and-parse flow: admin pastes the vendor's price message, LLM parses to `(product, price)` rows, admin reviews and publishes.
 - **Guard:** an order line whose product has no resolvable price is flagged at review and cannot proceed to billing until priced. Never silently bill at zero.
+- **500g / 1 kg prices (added 2026-10-23):** a kg product can carry a 500g price and a 1 kg price, read from the price-list paste ("₹600/500g ₹1150/kg"). A billed weight below 0.7 kg is charged at the 500g rate, 0.7 kg and up at the 1 kg rate; no tiers above 1 kg. Stored as base = 2 × 500g price plus one price tier from 0.7 kg (`src/lib/pricing/pack-prices.ts`).
+- **₹0 rate (added 2026-10-23):** an admin may set a single order line's rate to ₹0 (free replacement / free item), with a reason, before or after billing. That is explicit, not silent; price lists themselves can't be ₹0.
 
 ### 3.3 Order ≠ bill: weight closes at packing
 - The order captures **intent**: product + ordered quantity.

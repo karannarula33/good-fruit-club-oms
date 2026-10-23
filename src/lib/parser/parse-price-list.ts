@@ -13,6 +13,9 @@ export interface ParsedPriceItem {
   productId: string | null;
   rawText: string;
   price: number | null;
+  // Price of 500g when the list gives one for a kg product (see
+  // src/lib/pricing/pack-prices.ts); null otherwise.
+  halfKgPrice: number | null;
   confidence: ParseConfidence;
   flagReason: FlagReason;
 }
@@ -35,6 +38,7 @@ const PRICE_ITEMS_SCHEMA = {
           product_id: NULLABLE_STRING,
           raw_text: { type: "string" },
           price: NULLABLE_NUMBER,
+          half_kg_price: NULLABLE_NUMBER,
           confidence: { type: "string", enum: ["clean", "flagged"] },
           flag_reason: {
             anyOf: [
@@ -43,7 +47,7 @@ const PRICE_ITEMS_SCHEMA = {
             ],
           },
         },
-        required: ["product_id", "raw_text", "price", "confidence", "flag_reason"],
+        required: ["product_id", "raw_text", "price", "half_kg_price", "confidence", "flag_reason"],
         additionalProperties: false,
       },
     },
@@ -67,6 +71,9 @@ function validateParsedItem(raw: unknown, index: number): ParsedPriceItem {
   if (item.price !== null && typeof item.price !== "number") {
     throw new Error(`Parser item ${index}: price must be a number or null`);
   }
+  if (item.half_kg_price !== null && item.half_kg_price !== undefined && typeof item.half_kg_price !== "number") {
+    throw new Error(`Parser item ${index}: half_kg_price must be a number or null`);
+  }
   if (item.confidence !== "clean" && item.confidence !== "flagged") {
     throw new Error(`Parser item ${index}: confidence must be "clean" or "flagged"`);
   }
@@ -79,6 +86,7 @@ function validateParsedItem(raw: unknown, index: number): ParsedPriceItem {
     productId: item.product_id as string | null,
     rawText: item.raw_text,
     price: item.price as number | null,
+    halfKgPrice: (item.half_kg_price ?? null) as number | null,
     confidence: item.confidence,
     flagReason: item.flag_reason as FlagReason,
   };

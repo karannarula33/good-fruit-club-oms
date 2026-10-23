@@ -210,8 +210,8 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
     setError(null);
     if (openOrder?.billEditable) {
       const rate = Number(editingRate);
-      if (!Number.isFinite(rate) || rate <= 0) {
-        setError("Enter a rate greater than zero.");
+      if (editingRate.trim() === "" || !Number.isFinite(rate) || rate < 0) {
+        setError("Enter a rate (0 for a free item).");
         return;
       }
       setSavingLineId(lineId);
@@ -251,8 +251,8 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
     setError(null);
     if (openOrder?.billEditable) {
       const rate = Number(newRate);
-      if (!Number.isFinite(rate) || rate <= 0) {
-        setError("Enter a rate greater than zero.");
+      if (newRate.trim() === "" || !Number.isFinite(rate) || rate < 0) {
+        setError("Enter a rate (0 for a free item).");
         return;
       }
       setAddSaving(true);
