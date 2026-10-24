@@ -7,6 +7,7 @@ import { ChevronLeft, PackageCheck, Ban, MessageCircle, XCircle, Pencil, Plus, T
 import { finalizeOrder } from "@/app/actions/packing";
 import { generateBill, overrideLinePrice, overrideLineQuantity } from "@/app/actions/bills";
 import { addPackedLine, removePackedLine } from "@/app/actions/packed-edit";
+import { addBilledLine, editBilledLine, removeBilledLine, type BillEditResult } from "@/app/actions/bill-edit";
 import { updateCustomerSalutation } from "@/app/actions/customers";
 import { toWhatsAppDigits } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
@@ -770,6 +771,163 @@ function PackerAddItem({
   );
 }
 
+// Admin, after the bill is generated: change an item's billed qty or rate
+// (₹0 = free), or remove it. Each change rebuilds the bill in place
+// (src/app/actions/bill-edit.ts) -- total, net due, ledger debit, payment link.
+function BilledLineRow({ orderId, line, onChanged }: { orderId: string; line: PackingLine; onChanged: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [qtyInput, setQtyInput] = useState("");
+  const [rateInput, setRateInput] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const qty = line.billedQty ?? line.actualQty ?? 0;
+  const rate = line.lockedPricePerUnit;
+
+  function run(action: () => Promise<BillEditResult>) {
+    setError(null);
+    startTransition(async () => {
+      const r = await action();
+      if (!r.ok) return setError(r.error);
+      setEditing(false);
+      setConfirmRemove(false);
+      onChanged();
+    });
+  }
+
+  function handleSave() {
+    // Blank = unchanged; a typed 0 rate = free.
+    const newQty = qtyInput.trim() === "" ? qty : Number(qtyInput);
+    const newRate = rateInput.trim() === "" ? rate : Number(rateInput);
+    const edit: { qty?: number; price?: number } = {};
+    if (newQty !== qty) edit.qty = newQty;
+    if (newRate !== null && newRate !== rate) edit.price = newRate;
+    if (edit.qty === undefined && edit.price === undefined) return setEditing(false);
+    run(() => editBilledLine(orderId, line.id, edit));
+  }
+
+  if (editing) {
+    return (
+      <Card elevated className="!space-y-2">
+        <div className="font-sans text-sm font-bold text-foreground">{line.productName}</div>
+        <div className="flex items-center gap-2">
+          <Input size="lg" type="number" inputMode="decimal" min="0" placeholder="Qty" value={qtyInput}
+            onChange={(e) => setQtyInput(e.target.value)} className="w-28" />
+          <span className="font-sans text-[12.5px] font-semibold text-muted">{line.unitLabel ?? ""} @ ₹</span>
+          <Input size="lg" type="number" inputMode="decimal" min="0" placeholder="Rate" value={rateInput}
+            onChange={(e) => setRateInput(e.target.value)} className="w-28" />
+        </div>
+        <p className="font-sans text-[11.5px] text-muted">Rate 0 bills the item free (e.g. a replacement).</p>
+        {error && <FormError>{error}</FormError>}
+        <div className="flex gap-2">
+          <Button variant="secondary" fullWidth onClick={() => setEditing(false)} disabled={pending}>Cancel</Button>
+          <Button variant="dark" fullWidth onClick={handleSave} pending={pending} pendingText="Updating bill…">Save</Button>
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card elevated className="!space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <div className="font-sans text-sm font-bold text-foreground">{line.productName}</div>
+          <div className="flex items-center gap-1.5 font-sans text-[11.5px] font-semibold text-muted">
+            {qty} {line.unitLabel ?? ""} @ ₹{(rate ?? 0).toFixed(2)}
+            <button type="button" aria-label={`Edit ${line.productName}`} className="text-tertiary"
+              onClick={() => { setQtyInput(String(qty)); setRateInput(rate !== null ? String(rate) : ""); setError(null); setEditing(true); }}>
+              <Pencil className="size-3" />
+            </button>
+            <button type="button" aria-label={`Remove ${line.productName}`} className="text-tertiary"
+              onClick={() => { setError(null); setConfirmRemove(true); }}>
+              <Trash2 className="size-3" />
+            </button>
+          </div>
+        </div>
+        <div className="font-display text-sm font-bold text-foreground">₹{Math.round(qty * (rate ?? 0)).toFixed(2)}</div>
+      </div>
+      {confirmRemove && (
+        <div className="flex items-center gap-2">
+          <span className="flex-1 font-sans text-[12px] font-semibold text-muted">Remove from the bill?</span>
+          <Button size="sm" variant="secondary" onClick={() => setConfirmRemove(false)} disabled={pending}>Keep</Button>
+          <Button size="sm" variant="dark" pending={pending} pendingText="Removing…"
+            onClick={() => run(() => removeBilledLine(orderId, line.id))}>Remove</Button>
+        </div>
+      )}
+      {error && <FormError>{error}</FormError>}
+    </Card>
+  );
+}
+
+function BilledAddItem({
+  orderId,
+  products,
+  onChanged,
+}: {
+  orderId: string;
+  products: { id: string; name: string; unitLabel?: string | null }[];
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [productId, setProductId] = useState("");
+  const [qty, setQty] = useState("");
+  const [rate, setRate] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const unit = products.find((p) => p.id === productId)?.unitLabel ?? "";
+
+  function handleAdd() {
+    const n = Number(qty);
+    const r = Number(rate);
+    if (!productId) return setError("Pick an item.");
+    if (!Number.isFinite(n) || n <= 0) return setError("Enter a quantity greater than zero.");
+    if (rate.trim() === "" || !Number.isFinite(r) || r < 0) return setError("Enter a rate (0 for a free item).");
+    setError(null);
+    startTransition(async () => {
+      const result = await addBilledLine(orderId, productId, n, r);
+      if (!result.ok) return setError(result.error);
+      setOpen(false);
+      setProductId("");
+      setQty("");
+      setRate("");
+      onChanged();
+    });
+  }
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)}
+        className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-neutral-300 py-2.5 font-sans text-[12.5px] font-bold text-muted dark:border-neutral-700">
+        <Plus className="size-4" aria-hidden="true" />
+        Add item to bill
+      </button>
+    );
+  }
+  return (
+    <Card elevated className="!space-y-2">
+      <select value={productId} onChange={(e) => setProductId(e.target.value)}
+        className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 font-sans text-sm dark:border-neutral-700 dark:bg-neutral-900">
+        <option value="">Pick an item…</option>
+        {products.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
+      <div className="flex items-center gap-2">
+        <Input size="lg" type="number" inputMode="decimal" min="0" placeholder="Qty" value={qty}
+          onChange={(e) => setQty(e.target.value)} className="w-28" />
+        <span className="font-sans text-[12.5px] font-semibold text-muted">{unit} @ ₹</span>
+        <Input size="lg" type="number" inputMode="decimal" min="0" placeholder="Rate" value={rate}
+          onChange={(e) => setRate(e.target.value)} className="w-28" />
+      </div>
+      {error && <FormError>{error}</FormError>}
+      <div className="flex gap-2">
+        <Button variant="secondary" fullWidth onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>
+        <Button variant="dark" fullWidth onClick={handleAdd} pending={pending} pendingText="Adding…">Add</Button>
+      </div>
+    </Card>
+  );
+}
+
 function PackedDetail({
   order,
   isAdmin,
@@ -836,16 +994,26 @@ function PackedDetail({
       {isAdmin ? (
         <>
           <div className="font-sans text-[11px] font-bold uppercase tracking-wide text-success">
-            ✓ Packed — ready to bill
+            {order.hasBill ? "✓ Billed — edit items below, then send" : "✓ Packed — ready to bill"}
           </div>
           {packagingSummary && (
             <div className="font-sans text-[12.5px] font-semibold text-muted">{packagingSummary}</div>
           )}
-          <div className="flex flex-col gap-2">
-            {packedLines.map((line) => (
-              <PackedLineRow key={line.id} line={line} onOverridden={() => router.refresh()} />
-            ))}
-          </div>
+          {order.hasBill ? (
+            <div className="flex flex-col gap-2">
+              {packedLines.map((line) => (
+                <BilledLineRow key={line.id} orderId={order.id} line={line} onChanged={() => router.refresh()} />
+              ))}
+              <BilledAddItem orderId={order.id} products={products} onChanged={() => router.refresh()} />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {packedLines.map((line) => (
+                <PackedLineRow key={line.id} line={line} onOverridden={() => router.refresh()} />
+              ))}
+              <PackerAddItem orderId={order.id} products={products} onChanged={() => router.refresh()} />
+            </div>
+          )}
           {error && <FormError>{error}</FormError>}
           {needsSalutation ? (
             <div className="space-y-2 rounded-2xl bg-warning-bg p-3.5">
@@ -862,8 +1030,8 @@ function PackedDetail({
               </div>
             </div>
           ) : (
-            <Button variant="primary" fullWidth onClick={handleGenerateBill} pending={pending} pendingText="Generating…">
-              Generate Bill →
+            <Button variant="primary" fullWidth onClick={handleGenerateBill} pending={pending} pendingText={order.hasBill ? "Opening…" : "Generating…"}>
+              {order.hasBill ? "View / send bill →" : "Generate Bill →"}
             </Button>
           )}
         </>
