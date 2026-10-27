@@ -9,8 +9,9 @@
 // Cancelled site orders ("can": abandoned online payments) are skipped.
 //
 // A site order matches an OMS order of the same customer (phone hash) whose
-// delivery date is 0-3 days after the site order date (IST). The closest one
-// wins; an OMS order is used once. Orders whose paste already carries the
+// delivery date is 0-3 days after the site order date (IST) and, when billed,
+// whose bill is within 0.6x-1.6x of the site total. The closest date (then
+// amount) wins; an OMS order is used once. Orders whose paste already carries the
 // GFC number are website already (migration 0038).
 //
 // Usage: npx tsx --env-file=.env.local scripts/backfill_order_channel.ts <site_orders.json> [--execute]
@@ -50,6 +51,22 @@ async function main() {
     supabase.from("orders").select("id, customer_id, delivery_date, status, channel, raw_paste").order("id").range(f, t),
   );
 
+  const bills = await all<{ order_id: string; total: number }>((f, t) => supabase.from("bills").select("order_id, total").order("order_id").range(f, t));
+  const billOf = new Map(bills.map((b) => [b.order_id, Number(b.total)]));
+  // Frequent customers can have a WhatsApp order within the same few days, so
+  // when both sides have an amount, the bill must be within 0.6x-1.6x of the
+  // site total (weights and delivery fees move it, but not by more).
+  const amountFits = (siteTotal: number, orderId: string) => {
+    const bill = billOf.get(orderId);
+    if (!siteTotal || bill === undefined) return true;
+    const r = bill / siteTotal;
+    return r >= 0.6 && r <= 1.6;
+  };
+  const amountGap = (siteTotal: number, orderId: string) => {
+    const bill = billOf.get(orderId);
+    return !siteTotal || bill === undefined ? 0 : Math.abs(bill - siteTotal) / siteTotal;
+  };
+
   const hashOf = new Map(customers.map((c) => [c.id, c.phone ? hashPhone(c.phone) : null]));
   const byHash = new Map<string, typeof orders>();
   for (const o of orders) {
@@ -71,8 +88,8 @@ async function main() {
     const candidates = (byHash.get(s.h) ?? [])
       .filter((o) => !used.has(o.id) && o.status !== "cancelled")
       .map((o) => ({ o, d: dayDiff(siteDate, o.delivery_date) }))
-      .filter((x) => x.d >= 0 && x.d <= 3)
-      .sort((a, b) => a.d - b.d);
+      .filter((x) => x.d >= 0 && x.d <= 3 && amountFits(s.total, x.o.id))
+      .sort((a, b) => a.d - b.d || amountGap(s.total, a.o.id) - amountGap(s.total, b.o.id));
     const hit = candidates[0];
     if (!hit) { unmatched.push(s); continue; }
     used.add(hit.o.id);
