@@ -15,6 +15,7 @@ export type CustomerZone =
   | "Phase 5"
   | "Outside Gurgaon"
   | "Unassigned";
+export type OrderChannel = "website" | "whatsapp";
 export type OrderStatus =
   | "recorded"
   | "packed"
@@ -233,6 +234,7 @@ export interface Database {
           created_by: string | null;
           created_at: string;
           is_historical: boolean;
+          channel: OrderChannel;
         };
         Insert: {
           id?: string;
@@ -247,6 +249,7 @@ export interface Database {
           created_by?: string | null;
           created_at?: string;
           is_historical?: boolean;
+          channel?: OrderChannel;
         };
         Update: {
           id?: string;
@@ -261,6 +264,7 @@ export interface Database {
           created_by?: string | null;
           created_at?: string;
           is_historical?: boolean;
+          channel?: OrderChannel;
         };
         Relationships: [];
       };

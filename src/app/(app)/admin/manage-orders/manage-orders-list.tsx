@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, MessageCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { addOrderLine, deleteOrder, deleteOrderLine, updateOrderLineQty } from "@/app/actions/manage-orders";
 import { addBilledLine, editBilledLine, getBillMessage, removeBilledLine, type BillEditResult } from "@/app/actions/bill-edit";
+import { setOrderChannel } from "@/app/actions/order-channel";
 import { toWhatsAppDigits } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +22,7 @@ import {
   DISPLAY_STATUS_LABEL,
   ORDER_STATUS_LABEL,
 } from "@/lib/orders/status-display";
-import type { LineStatus, OrderStatus, UnitType } from "@/lib/supabase/database.types";
+import type { LineStatus, OrderChannel, OrderStatus, UnitType } from "@/lib/supabase/database.types";
 
 export interface ManageOrderLine {
   id: string;
@@ -45,6 +46,7 @@ export interface ManageOrderRow {
   billEditable: boolean;
   lines: ManageOrderLine[];
   packagingSummary: string | null;
+  channel: OrderChannel; // website vs WhatsApp, for reporting (migration 0038)
 }
 
 export interface ProductOption {
@@ -95,6 +97,15 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
   const [addSaving, setAddSaving] = useState(false);
 
   const openOrder = rows.find((r) => r.id === openOrderId) ?? null;
+  const [channelSaving, setChannelSaving] = useState(false);
+
+  async function changeChannel(orderId: string, channel: OrderChannel) {
+    setChannelSaving(true);
+    const res = await setOrderChannel(orderId, channel);
+    setChannelSaving(false);
+    if (!res.ok) { setError(res.error); return; }
+    router.refresh();
+  }
 
   function armConfirm(key: string) {
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
@@ -309,6 +320,9 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
                   <div className="font-sans text-[11px] font-semibold text-tertiary">{row.packagingSummary}</div>
                 )}
               </div>
+              {row.channel === "website" && (
+                <Badge size="sm" className="bg-info-bg text-info-text">Website</Badge>
+              )}
               <Badge size="sm" style={displayStatusChipStyle(displayStatus)}>
                 {DISPLAY_STATUS_LABEL[displayStatus]}
               </Badge>
@@ -333,6 +347,24 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
             {openOrder.packagingSummary && (
               <div className="font-sans text-[12.5px] font-semibold text-tertiary">{openOrder.packagingSummary}</div>
             )}
+
+            <div className="flex items-center gap-2 font-sans text-[12.5px]">
+              <span className="font-semibold text-muted">Ordered via</span>
+              {(["whatsapp", "website"] as const).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  disabled={channelSaving || openOrder.channel === c}
+                  onClick={() => changeChannel(openOrder.id, c)}
+                  className={cn(
+                    "rounded-full px-3 py-1 font-semibold",
+                    openOrder.channel === c ? "bg-brand text-white" : "bg-neutral-bg text-foreground",
+                  )}
+                >
+                  {c === "website" ? "Website" : "WhatsApp"}
+                </button>
+              ))}
+            </div>
 
             {openOrder.billEditable && (
               <div className="rounded-2xl bg-warning-bg px-3.5 py-2.5 font-sans text-[12.5px] font-semibold text-warning-text">

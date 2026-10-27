@@ -92,6 +92,8 @@ Today the admin copies a customer's WhatsApp message and pastes it into a centra
 5. Save → order is `recorded`, prices locked, delivery date stored.
 - Unknown product terms: reviewer maps them to a catalog product; the mapping is saved as an **alias** so it parses automatically next time.
 
+- **Order channel (added 2026-10-27):** every order has `orders.channel` = `website` (placed on goodfruit.club) or `whatsapp` (everything else, WhatsApp groups included — not a separate channel). Reporting only; separate from `source`, which drives billing. Set by a trigger (migration 0038): website when `source='website'` or the paste carries a `GFC-####` site order number, else whatsapp; admin can switch it on Manage Orders. Past orders were matched to the site's order list by `scripts/backfill_order_channel.ts`. The dashboard's "Website vs WhatsApp" section splits the summary by order channel and follows members by first-order channel (`src/lib/dashboard/channels.ts`).
+
 ---
 
 ## 4. Schema (Supabase migrations — build exactly this shape, extend only additively)

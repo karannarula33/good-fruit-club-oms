@@ -40,6 +40,7 @@ export interface MOrder {
   deliveryDate: string; // YYYY-MM-DD
   status: string;
   lines: MLine[];
+  channel?: "website" | "whatsapp"; // orders.channel (0038); missing = whatsapp
 }
 
 export interface MCustomer {

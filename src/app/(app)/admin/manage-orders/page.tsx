@@ -23,7 +23,7 @@ export default async function ManageOrdersPage({
 
   const { data: orders } = await supabase
     .from("orders")
-    .select("id, customer_id, status")
+    .select("id, customer_id, status, channel")
     .eq("delivery_date", date)
     .order("created_at", { ascending: false });
 
@@ -114,6 +114,7 @@ export default async function ManageOrdersPage({
       billEditable: billByOrderId.has(order.id) && order.status !== "cancelled",
       lines,
       packagingSummary: packagingSummaryByOrderId.get(order.id) || null,
+      channel: order.channel === "website" ? "website" : "whatsapp",
     };
   });
 

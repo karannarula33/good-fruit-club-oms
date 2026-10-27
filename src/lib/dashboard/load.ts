@@ -30,7 +30,7 @@ async function pageAll<T>(fetchPage: (from: number, to: number) => PromiseLike<{
 
 export async function loadSnapshot(supabase: Client): Promise<Snapshot & { schemaReady: boolean }> {
   const ordersRaw = await pageAll((f, t) =>
-    supabase.from("orders").select("id, customer_id, delivery_date, status").order("id").range(f, t),
+    supabase.from("orders").select("id, customer_id, delivery_date, status, channel").order("id").range(f, t),
   );
   const linesRaw = await pageAll((f, t) =>
     supabase
@@ -92,6 +92,7 @@ export async function loadSnapshot(supabase: Client): Promise<Snapshot & { schem
     deliveryDate: o.delivery_date,
     status: o.status,
     lines: linesByOrder.get(o.id) ?? [],
+    channel: o.channel === "website" ? "website" : "whatsapp",
   }));
 
   return { orders, customers, products, overheads, schemaReady };

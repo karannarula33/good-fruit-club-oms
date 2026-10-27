@@ -12,6 +12,7 @@ import {
   type DateRange, type RangeView, type Summary,
 } from "@/lib/dashboard/metrics";
 import { dailyInsights, type Insight, type InsightTone } from "@/lib/dashboard/insights";
+import { CHANNEL_LABEL, EARLY_REPEAT_DAYS, channelReport, channelSummaries } from "@/lib/dashboard/channels";
 import { TrendChart } from "./trend-chart";
 import { RangeControls } from "./range-controls";
 import { AutoRefresh } from "./auto-refresh";
@@ -145,6 +146,35 @@ function InsightRow({ insight }: { insight: Insight }) {
 
 // ---------- page ----------
 
+// Website vs WhatsApp: the rows of the comparison table (one Summary per channel).
+const CHANNEL_ROWS: { label: string; key: keyof Summary; kind: Kind; better: Better; format: (v: number | null) => string }[] = [
+  { label: "Orders", key: "orders", kind: "count", better: "up", format: (v) => (v === null ? "–" : String(v)) },
+  { label: "Revenue", key: "revenue", kind: "money", better: "up", format: (v) => rupees(v) },
+  { label: "AOV", key: "aov", kind: "money", better: "up", format: (v) => rupees(v) },
+  { label: "Items per order", key: "itemsPerOrder", kind: "ratio", better: "up", format: (v) => num(v) },
+  { label: "Gross margin", key: "grossMarginPct", kind: "pct", better: "up", format: (v) => pctText(v) },
+  { label: "Contribution per order", key: "contributionPerOrder", kind: "money", better: "up", format: (v) => rupees(v) },
+  { label: "Delivery per order", key: "deliveryPerOrder", kind: "money", better: "down", format: (v) => rupees(v) },
+  { label: "Active members", key: "activeMembers", kind: "count", better: "up", format: (v) => (v === null ? "–" : String(v)) },
+  { label: "New members", key: "newMembers", kind: "count", better: "up", format: (v) => (v === null ? "–" : String(v)) },
+  { label: "Retention", key: "retention", kind: "pct", better: "up", format: (v) => pctText(v) },
+  { label: "Second order in 14 days", key: "secondOrderRate14", kind: "pct", better: "up", format: (v) => pctText(v) },
+  { label: "Repeat rate", key: "repeatRate", kind: "pct", better: "up", format: (v) => pctText(v) },
+  { label: "Lifetime value (avg)", key: "ltvAverage", kind: "money", better: "up", format: (v) => rupees(v) },
+];
+
+const ACQ_ROWS: { label: string; value: (a: ReturnType<typeof channelReport>["acquisition"][number]) => string }[] = [
+  { label: "Members", value: (a) => String(a.members) },
+  { label: "New in this range", value: (a) => String(a.newInRange) },
+  { label: "Came back (any channel)", value: (a) => pctText(a.returnedPct, 0) },
+  { label: "Came back on the same channel", value: (a) => pctText(a.returnedSameChannelPct, 0) },
+  { label: "Later ordered on the other channel", value: (a) => pctText(a.usedOtherChannelPct, 0) },
+  { label: `2nd order within ${EARLY_REPEAT_DAYS} days`, value: (a) => pctText(a.earlyRepeatPct, 0) },
+  { label: "Orders per member", value: (a) => num(a.ordersPerMember) },
+  { label: "Lifetime value", value: (a) => rupees(a.ltv) },
+  { label: "Active (last 14 days)", value: (a) => pctText(a.activePct, 0) },
+];
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -168,6 +198,8 @@ export default async function DashboardPage({
   const cur = summarize(snap, current);
   const prev = summarize(snap, previous);
   const b = breakdowns(snap, current);
+  const ch = channelSummaries(snap, current, previous);
+  const chr = channelReport(snap, current);
 
   // Insights explain one day: the selected day, or the last day of the range
   // (never past today).
@@ -233,6 +265,52 @@ export default async function DashboardPage({
           {t("Contribution", "contribution", "money", "up", rupees(cur.contribution))}
           {t("Net after overheads", "netAfterOverheads", "money", "up", rupees(cur.netAfterOverheads), `Contribution – ads ${rupees(cur.adSpend)} – day-level costs ${rupees(cur.dayLevelCosts)}`)}
           {t("Revenue per operating day", "revenuePerOperatingDay", "money", "up", rupees(cur.revenuePerOperatingDay), `${cur.operatingDays} day${cur.operatingDays === 1 ? "" : "s"} with orders`)}
+        </div>
+      </Section>
+
+      <Section
+        title="Website vs WhatsApp"
+        note={`Website = placed on goodfruit.club; WhatsApp = everything else, groups included. Each channel column only counts that channel's orders, so its repeat and retention mean "came back on the same channel". The table below follows members from the channel of their first order across both channels.`}
+      >
+        <Card>
+          <Table
+            head={["", "All", "Website", "WhatsApp"]}
+            rows={CHANNEL_ROWS.map((r) => [
+              <span key="l" className="text-muted">{r.label}</span>,
+              ...(["all", "website", "whatsapp"] as const).map((k) => (
+                <span key={k} className="whitespace-nowrap">
+                  {r.format(ch[k].cur[r.key] as number | null)}
+                  {" "}
+                  <span className="text-[11px]"><Delta cur={ch[k].cur[r.key] as number | null} prev={ch[k].prev[r.key] as number | null} kind={r.kind} better={r.better} /></span>
+                </span>
+              )),
+            ])}
+          />
+          <p className="font-sans text-[11px] text-tertiary px-2 pt-1">
+            Change vs {rangeText(previous)}. {chr.mix.map((m) => `${CHANNEL_LABEL[m.channel]} ${pctText(m.orderShare, 0)} of orders, ${pctText(m.revenueShare, 0)} of revenue`).join(" · ")}.{" "}
+            {chr.bothChannelsInRange} member{chr.bothChannelsInRange === 1 ? "" : "s"} used both channels in this range ({chr.bothChannelsLifetime} ever).
+          </p>
+        </Card>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <Card>
+            <p className="font-sans text-sm font-bold text-foreground px-2 pt-1">By first-order channel</p>
+            <p className="font-sans text-xs text-muted px-2">Members grouped by where they first ordered, then everything they did after on either channel. As of {shortDate(current.to)}.</p>
+            <Table
+              head={["", "Website first", "WhatsApp first"]}
+              rows={ACQ_ROWS.map((r) => [
+                <span key="l" className="text-muted">{r.label}</span>,
+                ...chr.acquisition.map((a) => <span key={a.channel}>{r.value(a)}</span>),
+              ])}
+            />
+          </Card>
+          <Card>
+            <p className="font-sans text-sm font-bold text-foreground px-2 pt-1">Cohorts by first-order month and channel</p>
+            <Table
+              head={["Month", "Channel", "Members", "Came back", `2nd in ${EARLY_REPEAT_DAYS} d`, "LTV"]}
+              align={["l", "l", "r", "r", "r", "r"]}
+              rows={chr.cohorts.map((c) => [c.month, CHANNEL_LABEL[c.channel], c.members, pctText(c.returnedPct, 0), pctText(c.earlyRepeatPct, 0), rupees(c.ltv)])}
+            />
+          </Card>
         </div>
       </Section>
 
