@@ -1,5 +1,7 @@
 "use server";
 
+import { after } from "next/server";
+import { fillCustomerAreas } from "@/lib/customers/fill-areas";
 import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
@@ -161,6 +163,10 @@ export async function saveOrder(
       return { ok: false, error: customerError?.message ?? "Failed to create customer." };
     }
     customerId = newCustomer.id;
+    // Read the new customer's city / area from the address once the response
+    // is sent (rules, then Claude); the nightly cron retries any failure.
+    const newId = newCustomer.id;
+    after(() => fillCustomerAreas(createServiceRoleClient(), { customerIds: [newId] }).catch(() => undefined));
   }
 
   // Merge rule (CLAUDE.md §3.9): a same-customer paste for the same

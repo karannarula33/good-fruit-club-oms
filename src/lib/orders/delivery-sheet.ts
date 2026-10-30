@@ -1,4 +1,5 @@
-import { ZONE_ORDER, type Zone } from "@/lib/customers/zone";
+import { compareByZone } from "@/lib/customers/zone";
+import type { Zone } from "@/lib/customers/zone";
 import { packagesUsedByOrder, summarizePackagingCodes } from "@/lib/packing/packaging";
 import type { PackagingType } from "@/lib/supabase/database.types";
 
@@ -50,7 +51,7 @@ interface RawOrder {
   netDue: number;
 }
 
-// Groups billed orders for a delivery date into the fixed zone route order
+// Groups billed orders for a delivery date by area (zone), in route order
 // (CLAUDE.md §6), assigning each order a stable number in the order it was
 // originally entered -- not per-zone -- so the same order keeps the same
 // number regardless of which zone section it lands in, matching how the
@@ -81,8 +82,7 @@ export function buildDeliverySheetZoneGroups(
     rowsByZone.set(order.zone, rows);
   }
 
-  const zoneDisplayOrder: Zone[] = [...ZONE_ORDER, "Unassigned"];
-  return zoneDisplayOrder
-    .filter((zone) => rowsByZone.has(zone))
+  return [...rowsByZone.keys()]
+    .sort(compareByZone)
     .map((zone) => ({ zone, rows: rowsByZone.get(zone)!.sort((a, b) => a.orderNumber - b.orderNumber) }));
 }

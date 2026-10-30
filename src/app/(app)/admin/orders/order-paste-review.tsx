@@ -647,7 +647,10 @@ export function OrderPasteReview({
                         className="w-full"
                       />
                       <p className="font-sans text-xs text-muted">
-                        Zone: {current.resolution.address ? deriveZoneFromAddress(current.resolution.address) : "—"}
+                        Zone: {(() => {
+                          const a = current.resolution.address ? deriveZoneFromAddress(current.resolution.address) : null;
+                          return !a ? "—" : a === "Unassigned" ? "set from the address after saving" : a;
+                        })()}
                       </p>
                     </div>
                   </div>

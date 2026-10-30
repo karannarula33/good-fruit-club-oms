@@ -17,18 +17,21 @@ interface CustomerRow {
   phone: string | null;
   address: string;
   zone: Zone;
+  city: string | null;
+  area: string | null;
   notes: string | null;
   salutation: Salutation | null;
   payment_mode: PaymentMode;
 }
 
 export function CustomerList({ customers }: { customers: CustomerRow[] }) {
+  const zonesInUse = useMemo(() => [...new Set(customers.map((c) => c.zone))], [customers]);
   const [query, setQuery] = useState("");
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return customers;
-    return customers.filter((c) => c.display_name.toLowerCase().includes(q));
+    return customers.filter((c) => [c.display_name, c.area, c.city].some((v) => v?.toLowerCase().includes(q)));
   }, [customers, query]);
 
   return (
@@ -52,10 +55,13 @@ export function CustomerList({ customers }: { customers: CustomerRow[] }) {
                   <div className="truncate font-sans text-[12px] font-medium text-muted">
                     {customer.phone ?? "No phone"} · {customer.address}
                   </div>
+                  <div className={customer.area ? "font-sans text-[11px] font-semibold text-tertiary" : "font-sans text-[11px] font-semibold text-danger-text"}>
+                    {customer.area ? [customer.area, customer.city].filter(Boolean).join(", ") : "Area not read yet"}
+                  </div>
                 </div>
               </Link>
               <div className="flex flex-col items-end gap-1.5">
-                <ZoneSelect customerId={customer.id} zone={customer.zone} />
+                <ZoneSelect customerId={customer.id} zone={customer.zone} zonesInUse={zonesInUse} />
                 <SalutationSelect customerId={customer.id} salutation={customer.salutation} />
                 <PaymentModeSelect customerId={customer.id} paymentMode={customer.payment_mode} />
               </div>

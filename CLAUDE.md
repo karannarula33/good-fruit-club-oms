@@ -208,6 +208,8 @@ Rules: never invent products — unknown terms return `product_id: null` + `flag
 
 ## 6. Fixed reference data
 
+**Customer area (added 2026-10-28):** separate from the route zone below. `customers.city` / `area` / `locality` (migration 0039) say where the customer actually is — city (Gurgaon, Delhi, Noida, Faridabad, Ghaziabad, Other), neighbourhood ("DLF Phase 2", "Sushant Lok 1", "Sector 65", "Paschim Vihar", "Lodhi Road") and society ("Heritage City"). Read from the address by rules in `src/lib/customers/area.ts`, with Claude as the fallback (`src/lib/parser/resolve-area.ts`, prompt `src/lib/prompts/area-resolver.ts`); filled for new customers right after they're created and nightly by `/api/cron/customer-areas`. An admin edit on the customer page is kept as `area_source='manual'` and never overwritten. The dashboard's Areas section (`src/lib/dashboard/areas.ts`) reports by city, area and society. **Zones (revised 2026-10-31):** the original zones below keep their names and customers in them keep them. A customer with no zone gets one from their area (`zoneForArea` in `src/lib/customers/zone.ts`): the matching original zone (DLF Phase 3 → "Phase 3", Sushant Lok 1 → "Sushant Lok") or a new zone named after the area ("Paschim Vihar", "Sector 65"). New zones sort after the original ones, A–Z. The admin can still pick any zone on the customer list.
+
 **Delivery zone priority (route order, hard-coded):**
 DLF Phase 2 (incl. Heritage City, The Vilas) → Sushant Lok → Near Hamilton Court → DLF Phase 1 → Phase 3 → Phase 4 → Phase 5 → Outside Gurgaon.
 

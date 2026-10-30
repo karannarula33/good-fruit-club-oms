@@ -48,6 +48,9 @@ export interface MCustomer {
   name: string;
   zone: string | null;
   isInternal: boolean;
+  city?: string | null; // customers.city / area / locality (0039)
+  area?: string | null;
+  locality?: string | null;
 }
 
 export interface MProduct {
@@ -638,7 +641,7 @@ export function breakdowns(snap: Snapshot, range: DateRange): Breakdowns {
     const since = daysBetween(last, range.to);
     if (since > 2 * usual) {
       const c = customerById.get(h.customerId);
-      quietMembers.push({ id: h.customerId, name: c?.name ?? "Unknown", zone: c?.zone || "Unassigned", lastOrder: last, daysSince: since, usualGap: usual, orders: h.dates.length, lifetimeRevenue: h.revenue });
+      quietMembers.push({ id: h.customerId, name: c?.name ?? "Unknown", zone: c?.area || c?.zone || "Unassigned", lastOrder: last, daysSince: since, usualGap: usual, orders: h.dates.length, lifetimeRevenue: h.revenue });
     }
   }
   // Most valuable first: these are the win-back calls worth making today.

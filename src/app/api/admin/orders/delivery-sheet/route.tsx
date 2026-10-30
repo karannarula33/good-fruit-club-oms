@@ -13,7 +13,7 @@ import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@r
 import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
-import { ZONE_HEADER_LABEL, deriveZoneFromAddress, type Zone } from "@/lib/customers/zone";
+import { zoneHeaderLabel, deriveZoneFromAddress, type Zone } from "@/lib/customers/zone";
 import { buildDeliverySheetZoneGroups, formatDeliveryDateHeader } from "@/lib/orders/delivery-sheet";
 import type { PackagingType } from "@/lib/supabase/database.types";
 
@@ -82,7 +82,7 @@ function DeliverySheetDocument({
 
         {zoneGroups.map((group) => (
           <View key={group.zone} style={styles.zoneBlock} wrap={false}>
-            <Text style={styles.zoneHeader}>{ZONE_HEADER_LABEL[group.zone]}</Text>
+            <Text style={styles.zoneHeader}>{zoneHeaderLabel(group.zone)}</Text>
             <View style={styles.headerRow}>
               <Text style={[styles.cell, styles.colOrder]}>Order #</Text>
               <Text style={[styles.cell, styles.colCustomer]}>Customer Name / ग्राहक नाम</Text>

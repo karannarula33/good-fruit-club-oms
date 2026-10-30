@@ -5,16 +5,10 @@
 
 export type Role = "admin" | "packer" | "delivery";
 export type UnitType = "weight" | "count";
-export type CustomerZone =
-  | "DLF Phase 2"
-  | "Sushant Lok"
-  | "Near Hamilton Court"
-  | "DLF Phase 1"
-  | "Phase 3"
-  | "Phase 4"
-  | "Phase 5"
-  | "Outside Gurgaon"
-  | "Unassigned";
+// Free text since 0039: mirrors customers.area ("Unassigned" when unknown).
+export type CustomerZone = string;
+export type City = "Gurgaon" | "Delhi" | "Noida" | "Faridabad" | "Ghaziabad" | "Other";
+export type AreaSource = "auto" | "manual";
 export type OrderChannel = "website" | "whatsapp";
 export type OrderStatus =
   | "recorded"
@@ -193,6 +187,11 @@ export interface Database {
           salutation: Salutation | null;
           payment_mode: PaymentMode;
           is_internal: boolean;
+          city: City | null;
+          area: string | null;
+          locality: string | null;
+          area_source: AreaSource | null;
+          area_resolved_for: string | null;
         };
         Insert: {
           id?: string;
@@ -205,6 +204,11 @@ export interface Database {
           salutation?: Salutation | null;
           payment_mode?: PaymentMode;
           is_internal?: boolean;
+          city?: City | null;
+          area?: string | null;
+          locality?: string | null;
+          area_source?: AreaSource | null;
+          area_resolved_for?: string | null;
         };
         Update: {
           id?: string;
@@ -217,6 +221,11 @@ export interface Database {
           salutation?: Salutation | null;
           payment_mode?: PaymentMode;
           is_internal?: boolean;
+          city?: City | null;
+          area?: string | null;
+          locality?: string | null;
+          area_source?: AreaSource | null;
+          area_resolved_for?: string | null;
         };
         Relationships: [];
       };

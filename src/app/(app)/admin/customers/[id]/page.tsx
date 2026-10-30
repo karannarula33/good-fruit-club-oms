@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge, type BadgeTone } from "@/components/ui/badge";
 import { RecordPaymentForm } from "./record-payment-form";
+import { AreaEditor } from "./area-editor";
 
 const PAYMENT_STATUS_TONE: Record<PaymentStatus, BadgeTone> = {
   paid: "success",
@@ -23,12 +24,14 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
 
   const { data: customer } = await supabase
     .from("customers")
-    .select("id, display_name, phone, address, zone")
+    .select("id, display_name, phone, address, zone, city, area, locality, area_source")
     .eq("id", id)
     .maybeSingle();
   if (!customer) {
     notFound();
   }
+  const { data: areaRows } = await supabase.from("customers").select("area").not("area", "is", null);
+  const areaOptions = [...new Set((areaRows ?? []).map((r) => r.area as string))].sort();
 
   const [{ data: orders }, { data: ledgerEntries }] = await Promise.all([
     supabase
@@ -94,8 +97,16 @@ export default async function CustomerDetailPage({ params }: { params: Promise<{
           </div>
         </div>
         <div className="font-sans text-xs font-medium text-muted">
-          {customer.address} · {customer.zone}
+          {customer.address} · Zone: {customer.zone}
         </div>
+        <AreaEditor
+          customerId={customer.id}
+          city={customer.city}
+          area={customer.area}
+          locality={customer.locality}
+          source={customer.area_source}
+          areaOptions={areaOptions}
+        />
         <div className="flex items-center justify-between border-t border-dashed border-[#ECEAE3] pt-3.5">
           <div className="font-sans text-[13px] font-semibold text-[#5b5e66]">Balance due</div>
           <div className="font-display text-xl font-extrabold text-foreground">

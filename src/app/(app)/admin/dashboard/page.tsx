@@ -13,6 +13,7 @@ import {
 } from "@/lib/dashboard/metrics";
 import { dailyInsights, type Insight, type InsightTone } from "@/lib/dashboard/insights";
 import { CHANNEL_LABEL, EARLY_REPEAT_DAYS, channelReport, channelSummaries } from "@/lib/dashboard/channels";
+import { areaReport, UNKNOWN_AREA, type AreaRow } from "@/lib/dashboard/areas";
 import { TrendChart } from "./trend-chart";
 import { RangeControls } from "./range-controls";
 import { AutoRefresh } from "./auto-refresh";
@@ -175,6 +176,14 @@ const ACQ_ROWS: { label: string; value: (a: ReturnType<typeof channelReport>["ac
   { label: "Active (last 14 days)", value: (a) => pctText(a.activePct, 0) },
 ];
 
+// Area tables (src/lib/dashboard/areas.ts): shared columns for city and area rows.
+const AREA_HEAD = ["Members", "Active", "New", "Orders", "Revenue", "Share", "AOV", "Repeat", "Website", "Delivery / order", "Contribution %"];
+const AREA_ALIGN: ("l" | "r")[] = AREA_HEAD.map(() => "r");
+const areaCells = (r: AreaRow): React.ReactNode[] => [
+  r.lifetimeMembers, r.activeMembers, r.newMembers, r.orders, rupees(r.revenue), pctText(r.revenueShare, 0), rupees(r.aov),
+  pctText(r.repeatRate, 0), pctText(r.websiteShare, 0), rupees(r.deliveryPerOrder), pctText(r.contributionPct, 0),
+];
+
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -200,6 +209,7 @@ export default async function DashboardPage({
   const b = breakdowns(snap, current);
   const ch = channelSummaries(snap, current, previous);
   const chr = channelReport(snap, current);
+  const ar = areaReport(snap, current);
 
   // Insights explain one day: the selected day, or the last day of the range
   // (never past today).
@@ -433,7 +443,7 @@ export default async function DashboardPage({
           <p className="font-sans text-sm font-bold text-foreground px-2 pt-1">Quiet past their normal gap ({b.quietMembers.length})</p>
           <p className="font-sans text-xs text-muted px-2">Days since last order is more than twice their usual gap. Highest lifetime value first.</p>
           <Table
-            head={["Member", "Zone", "Last order", "Days quiet", "Usual gap", "Orders", "Lifetime"]}
+            head={["Member", "Area", "Last order", "Days quiet", "Usual gap", "Orders", "Lifetime"]}
             align={["l", "l", "r", "r", "r", "r", "r"]}
             rows={b.quietMembers.slice(0, 40).map((q) => [q.name, q.zone, shortDate(q.lastOrder), q.daysSince, `${q.usualGap} d`, q.orders, rupees(q.lifetimeRevenue)])}
             empty="Nobody is overdue."
@@ -523,11 +533,30 @@ export default async function DashboardPage({
         </div>
       </Section>
 
-      <Section title="Zones" note={`${b.unassignedOrders} order${b.unassignedOrders === 1 ? "" : "s"} in this range belong to members with no zone set.`}>
+      <Section
+        title="Areas"
+        note={`Where members live, read from their address: city, then neighbourhood, then society. Orders, revenue and new members are for this range; members and repeat rate are lifetime up to ${shortDate(current.to)}. ${ar.unknownAreaOrders} order${ar.unknownAreaOrders === 1 ? "" : "s"} in this range are from members whose area isn't known yet; set it on their customer page.`}
+      >
         <Card>
+          <p className="font-sans text-sm font-bold text-foreground px-2 pt-1">By city</p>
+          <Table head={["City", ...AREA_HEAD]} align={["l", ...AREA_ALIGN]} rows={ar.cities.map((r) => [r.city, ...areaCells(r)])} />
+        </Card>
+        <Card>
+          <p className="font-sans text-sm font-bold text-foreground px-2 pt-1">By area ({ar.areas.length})</p>
           <Table
-            head={["Zone", "Members", "Orders", "Revenue", "AOV", "Orders / member", "Delivery / order", "Delivery %", "Contribution %", "New"]}
-            rows={b.zones.map((z) => [z.zone, z.members, z.orders, rupees(z.revenue), rupees(z.aov), num(z.ordersPerMember), rupees(z.deliveryPerOrder), pctText(z.deliveryPct), pctText(z.contributionPct), z.newMembers])}
+            head={["Area", "City", ...AREA_HEAD]}
+            align={["l", "l", ...AREA_ALIGN]}
+            rows={ar.areas.slice(0, 60).map((r) => [r.area === UNKNOWN_AREA ? <span key="u" className="text-muted">{r.area}</span> : r.area, r.city, ...areaCells(r)])}
+          />
+          {ar.areas.length > 60 && <p className="font-sans text-[11px] text-tertiary px-2 pt-1">Showing the top 60 by revenue.</p>}
+        </Card>
+        <Card>
+          <p className="font-sans text-sm font-bold text-foreground px-2 pt-1">Top societies in this range</p>
+          <Table
+            head={["Society", "Area", "Members", "Orders", "Revenue"]}
+            align={["l", "l", "r", "r", "r"]}
+            rows={ar.societies.map((x) => [x.locality, `${x.area}, ${x.city}`, x.members, x.orders, rupees(x.revenue)])}
+            empty="No orders from named societies in this range."
           />
         </Card>
       </Section>

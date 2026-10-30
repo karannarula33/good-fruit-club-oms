@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { updateCustomerZone } from "@/app/actions/customers";
 import { Select } from "@/components/ui/select";
 import { FormError } from "@/components/ui/form-error";
-import { ZONE_ORDER, type Zone } from "@/lib/customers/zone";
+import { ZONE_ORDER, compareByZone, type Zone } from "@/lib/customers/zone";
 
-const ALL_ZONES: Zone[] = [...ZONE_ORDER, "Unassigned"];
-
-export function ZoneSelect({ customerId, zone }: { customerId: string; zone: Zone }) {
+// Options: the original zones, every zone already in use (new area-based ones
+// like "Paschim Vihar"), and Unassigned.
+export function ZoneSelect({ customerId, zone, zonesInUse }: { customerId: string; zone: Zone; zonesInUse: string[] }) {
+  const ALL_ZONES = [...new Set([...ZONE_ORDER, ...zonesInUse, zone, "Unassigned"])].sort(compareByZone);
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);

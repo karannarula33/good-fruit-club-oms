@@ -5,10 +5,8 @@ import { requireRole } from "@/lib/auth/require-role";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { requireBillingAccess } from "@/lib/auth/billing-access";
-import { ZONE_ORDER } from "@/lib/customers/zone";
-import type { CustomerZone, PaymentMode, Salutation } from "@/lib/supabase/database.types";
+import type { PaymentMode, Salutation } from "@/lib/supabase/database.types";
 
-const VALID_ZONES: readonly string[] = [...ZONE_ORDER, "Unassigned"];
 const VALID_SALUTATIONS: readonly Salutation[] = ["Sir", "Ma'am"];
 const VALID_PAYMENT_MODES: readonly PaymentMode[] = ["cod", "online"];
 
@@ -18,14 +16,13 @@ export async function updateCustomerZone(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireRole(["admin"]);
 
-  if (!VALID_ZONES.includes(zone)) {
-    return { ok: false, error: `Unknown zone: ${zone}` };
-  }
+  zone = zone.trim();
+  if (!zone) return { ok: false, error: "Pick a zone." };
 
   const supabase = await createClient();
   const { error } = await supabase
     .from("customers")
-    .update({ zone: zone as CustomerZone })
+    .update({ zone })
     .eq("id", customerId);
 
   if (error) {

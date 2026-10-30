@@ -53,9 +53,15 @@ export async function loadSnapshot(supabase: Client): Promise<Snapshot & { schem
   }
 
   let customers: MCustomer[];
-  const withInternal = await pageAll((f, t) => supabase.from("customers").select("id, display_name, zone, is_internal").order("id").range(f, t)).catch(() => null);
+  // Location columns (0039) are optional so the dashboard still loads before
+  // that migration runs.
+  const withArea = await pageAll((f, t) => supabase.from("customers").select("id, display_name, zone, is_internal, city, area, locality").order("id").range(f, t)).catch(() => null);
+  const withInternal = withArea ?? (await pageAll((f, t) => supabase.from("customers").select("id, display_name, zone, is_internal").order("id").range(f, t)).catch(() => null));
   if (withInternal) {
-    customers = withInternal.map((c) => ({ id: c.id, name: c.display_name, zone: c.zone, isInternal: c.is_internal }));
+    customers = withInternal.map((c) => {
+      const loc = c as { city?: string | null; area?: string | null; locality?: string | null };
+      return { id: c.id, name: c.display_name, zone: c.zone, isInternal: c.is_internal, city: loc.city ?? null, area: loc.area ?? null, locality: loc.locality ?? null };
+    });
   } else {
     schemaReady = false;
     const plain = await pageAll((f, t) => supabase.from("customers").select("id, display_name, zone").order("id").range(f, t));
