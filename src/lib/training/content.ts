@@ -131,13 +131,13 @@ The handbook is your reference. Anything flagged **Check with Karan** isn't sett
 
 ## Hero fruit right now
 
-As on the site on 3 Nov 2026 (always check the site for today's price):
+As on the price list of 3 Nov 2026 (always check the site for today's price):
 
 | Fruit | Price | Delivery |
 | --- | --- | --- |
 | Mangosteen | ₹600 / 500g · ₹1,150/kg for 1kg+ | Same / next day |
-| Longan | ₹500 / 500g · ₹950/kg for 1kg+ | Same / next day |
-| Donut Peach | ₹650 / box (7–8 pc, 500g) | Pre-order, 2–4 days |
+| Longan | ₹470 / 500g · ₹900/kg for 1kg+ | Same / next day |
+| Donut Peach | ₹650 / box (6–7 pc, 500g) | Pre-order, 2–4 days |
 | Fuyu Persimmon | See site | Same / next day |
 | Chikoo | See site | Same / next day |
 | Medjool Dates | ₹990 / 500g | Same / next day |
@@ -198,7 +198,7 @@ Every order has to end up in the OMS before the day's packing sheet is built.
 ## Taking a WhatsApp order (1–4)
 
 1. **Reply within minutes** during working hours. A slow first reply loses the order.
-2. **Confirm each item** with its quantity and price from the site, e.g. "Mangosteen 1kg ₹1,150, Kinnaur Apple 1kg ₹350".
+2. **Confirm each item** with its quantity and price from the site, e.g. "Mangosteen 1kg ₹1,150, Kinnaur Apple 1kg ₹330".
 3. **Confirm the full address.** New members need a building or tower, flat number and landmark. Ask for a Google Maps pin if the area is new to us.
 4. **Confirm the delivery day** using the cut-off rule (module 4). Mention when an item is on pre-order.
 
