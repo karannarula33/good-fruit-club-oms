@@ -19,7 +19,8 @@ interface Stop {
   undeliveredReason: string | null;
 }
 
-export function DeliveryStopsBoard({ stops }: { stops: Stop[] }) {
+// readOnly (engagement role): status at a glance, no delivery actions.
+export function DeliveryStopsBoard({ stops, readOnly = false }: { stops: Stop[]; readOnly?: boolean }) {
   const [selectedForOutForDelivery, setSelectedForOutForDelivery] = useState<Set<string>>(new Set());
 
   const [optimisticStops, setOptimisticStopsStatus] = useOptimistic(
@@ -41,7 +42,7 @@ export function DeliveryStopsBoard({ stops }: { stops: Stop[] }) {
 
   return (
     <div className="flex flex-col gap-4">
-      {dispatchedCount > 0 && (
+      {dispatchedCount > 0 && !readOnly && (
         <MarkOutForDeliveryButton
           selectedIds={[...selectedForOutForDelivery]}
           onMarked={() => setSelectedForOutForDelivery(new Set())}
@@ -63,7 +64,8 @@ export function DeliveryStopsBoard({ stops }: { stops: Stop[] }) {
           >
             <DeliveryStopCard
               stop={stop}
-              selectable={stop.status === "dispatched"}
+              readOnly={readOnly}
+              selectable={stop.status === "dispatched" && !readOnly}
               checked={selectedForOutForDelivery.has(stop.id)}
               onToggle={(checked) => toggleOutForDelivery(stop.id, checked)}
               onOptimisticDeliver={() => setOptimisticStopsStatus({ ids: [stop.id], status: "delivered" })}

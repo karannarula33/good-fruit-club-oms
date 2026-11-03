@@ -38,8 +38,10 @@ export function DeliveryStopCard({
   onToggle,
   onOptimisticDeliver,
   onOptimisticUndeliver,
+  readOnly = false,
 }: {
   stop: Stop;
+  readOnly?: boolean;
   selectable?: boolean;
   checked?: boolean;
   onToggle?: (checked: boolean) => void;
@@ -163,7 +165,7 @@ export function DeliveryStopCard({
       {stop.billTotal === null && <FormError>Not billed yet</FormError>}
       {error && <FormError>{error}</FormError>}
 
-      {stop.status === "out_for_delivery" && (
+      {stop.status === "out_for_delivery" && !readOnly && (
         <div className="flex gap-2">
           <Button variant="primary" fullWidth onClick={() => setSheetOpen(true)}>
             Mark Delivered
@@ -192,7 +194,7 @@ export function DeliveryStopCard({
 
   return (
     <>
-      {stop.status !== "out_for_delivery" ? (
+      {stop.status !== "out_for_delivery" || readOnly ? (
         cardContent
       ) : (
         <div className="relative">

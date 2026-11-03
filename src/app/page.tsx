@@ -7,6 +7,7 @@ const ROLE_HOME: Record<string, string> = {
   admin: "/admin/orders",
   packer: "/packer",
   delivery: "/delivery",
+  engagement: "/learn",
 };
 
 export default async function Home() {

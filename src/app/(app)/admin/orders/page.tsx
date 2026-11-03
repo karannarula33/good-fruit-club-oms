@@ -4,9 +4,9 @@ import { PageHeader } from "@/components/ui/page-header";
 import { OrderPasteReview } from "./order-paste-review";
 
 export default async function AdminOrdersPage() {
-  // Admins and packers enter orders; packers never see prices (see
-  // src/app/actions/orders.ts).
-  await requireRole(["admin", "packer"]);
+  // Admins, packers and the engagement role enter orders; packers never see
+  // prices (see src/app/actions/orders.ts).
+  await requireRole(["admin", "packer", "engagement"]);
 
   const supabase = await createClient();
   const [{ data: customers }, { data: products }] = await Promise.all([

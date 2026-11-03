@@ -42,7 +42,7 @@ type ActionResult = { ok: true } | { ok: false; error: string };
 // 'relayed' (both simply leave the queue), so there's no observable
 // difference in persisting it as an intermediate step.
 export async function relayNudge(nudgeId: string, finalMessage?: string): Promise<ActionResult> {
-  await requireRole(["admin"]);
+  await requireRole(["admin", "engagement"]);
   const supabase = await createClient();
   const now = new Date().toISOString();
 
@@ -64,7 +64,7 @@ export async function relayNudge(nudgeId: string, finalMessage?: string): Promis
 // §10: "Skip -> skipped (a trigger skipped repeatedly => miscalibrated
 // rule, revisit §3)."
 export async function skipNudge(nudgeId: string): Promise<ActionResult> {
-  await requireRole(["admin"]);
+  await requireRole(["admin", "engagement"]);
   const supabase = await createClient();
 
   const { error } = await supabase
@@ -80,7 +80,7 @@ export async function skipNudge(nudgeId: string): Promise<ActionResult> {
 // §10: "Snooze -> set snooze_until, re-surface then." Fixed 3-day quick
 // action, matching the single [Snooze 3d] button in the spec's own mockup.
 export async function snoozeNudge(nudgeId: string): Promise<ActionResult> {
-  await requireRole(["admin"]);
+  await requireRole(["admin", "engagement"]);
   const supabase = await createClient();
 
   const snoozeUntil = new Date(Date.now() + 3 * 86_400_000);

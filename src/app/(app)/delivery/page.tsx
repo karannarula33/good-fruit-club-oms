@@ -13,7 +13,8 @@ export default async function DeliveryPage({
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
-  await requireRole(["delivery", "admin"]);
+  // The engagement role sees the route read-only, to update members.
+  const profile = await requireRole(["delivery", "admin", "engagement"]);
 
   const params = await searchParams;
   const date = params.date ?? utcToIstDatetimeLocal(new Date()).slice(0, 10);
@@ -77,7 +78,7 @@ export default async function DeliveryPage({
         action={<DateNav date={date} basePath="/delivery" />}
       />
       <div className="mt-4">
-        <DeliveryStopsBoard key={date} stops={stops} />
+        <DeliveryStopsBoard key={date} stops={stops} readOnly={profile.role === "engagement"} />
       </div>
     </div>
   );

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { KeyRound, LogOut } from "lucide-react";
 import { signOut } from "@/app/actions/auth";
 import { cn } from "@/lib/cn";
 import type { Role } from "@/lib/supabase/database.types";
@@ -11,6 +11,7 @@ const ROLE_HOME: Record<Role, string> = {
   admin: "/admin/orders",
   packer: "/packer",
   delivery: "/delivery",
+  engagement: "/learn",
 };
 
 // Matches the design handoff's "Navigation Shell" table exactly -- label
@@ -32,6 +33,7 @@ const TABS: Record<Role, { href: string; label: string }[]> = {
     { href: "/admin/engagement", label: "Engagement" },
     { href: "/admin/manage-orders", label: "Manage" },
     { href: "/admin/dashboard", label: "Dashboard" },
+    { href: "/admin/training", label: "Training" },
   ],
   packer: [
     { href: "/admin/orders", label: "Orders" },
@@ -39,17 +41,32 @@ const TABS: Record<Role, { href: string; label: string }[]> = {
     { href: "/packer/stock", label: "Stock" },
   ],
   delivery: [{ href: "/delivery", label: "Route" }],
+  // The community manager (CLAUDE.md "Engagement role", migration 0041).
+  engagement: [
+    { href: "/learn", label: "Learn" },
+    { href: "/admin/orders", label: "Orders" },
+    { href: "/admin/engagement", label: "Engagement" },
+    { href: "/delivery", label: "Route" },
+  ],
 };
 
 export function AppShell({
   profile,
+  learn,
+  mustChangePassword = false,
   children,
 }: {
+  mustChangePassword?: boolean;
   profile: { fullName: string | null; phone: string | null; role: Role };
+  // Learn GFC progress for an assigned learner ("6 of 11"), else null.
+  learn?: { done: number; total: number } | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const tabs = TABS[profile.role];
+  // Anyone assigned the onboarding gets a Learn tab (the engagement role has it already).
+  const baseTabs = TABS[profile.role];
+  const tabs =
+    learn && !baseTabs.some((t) => t.href === "/learn") ? [{ href: "/learn", label: "Learn" }, ...baseTabs] : baseTabs;
   const many = tabs.length > 2;
 
   return (
@@ -61,6 +78,10 @@ export function AppShell({
           </span>
           <span className="font-display text-sm font-bold text-foreground">Good Fruit Club</span>
         </Link>
+        <div className="flex items-center">
+        <Link href="/account/password" prefetch={false} title="Change password" className="rounded-full p-2 text-muted hover:bg-neutral-bg hover:text-foreground">
+          <KeyRound className="size-4" aria-hidden="true" />
+        </Link>
         <form action={signOut}>
           <button
             type="submit"
@@ -70,7 +91,19 @@ export function AppShell({
             <LogOut className="size-4" aria-hidden="true" />
           </button>
         </form>
+        </div>
       </div>
+
+      {mustChangePassword && pathname !== "/account/password" && (
+        <Link
+          href="/account/password"
+          prefetch={false}
+          className="mx-4 mb-1 flex items-center justify-between gap-3 rounded-xl bg-warning-bg px-3 py-2.5 font-sans text-[13px] font-semibold text-warning-text"
+        >
+          <span>You&apos;re using a temporary password. Please change it.</span>
+          <span className="shrink-0 font-extrabold">Change →</span>
+        </Link>
+      )}
 
       <main className="flex-1 overflow-y-auto pb-[calc(64px+env(safe-area-inset-bottom,0px))]">
         {children}
@@ -84,7 +117,8 @@ export function AppShell({
         style={{ paddingBottom: "calc(8px + env(safe-area-inset-bottom, 0px))" }}
       >
         {tabs.map((tab) => {
-          const active = pathname === tab.href;
+          const active = pathname === tab.href || (tab.href === "/learn" && pathname.startsWith("/learn/"));
+          const showBadge = tab.href === "/learn" && learn && learn.done < learn.total;
           return (
             <Link
               key={tab.href}
@@ -97,7 +131,17 @@ export function AppShell({
               )}
             >
               <span className={cn("size-[5px] rounded-full", active ? "bg-brand" : "bg-transparent")} />
-              {tab.label}
+              <span className="flex items-center gap-1">
+                {tab.label}
+                {showBadge && (
+                  <span
+                    aria-label={`${learn.done} of ${learn.total} done`}
+                    className="rounded-full bg-brand px-1.5 py-px text-[9.5px] font-extrabold leading-tight text-white"
+                  >
+                    {learn.done}/{learn.total}
+                  </span>
+                )}
+              </span>
             </Link>
           );
         })}

@@ -41,7 +41,7 @@ type Supabase = Awaited<ReturnType<typeof createClient>>;
 // the server reads them with the service role -- read-only, and the amounts
 // are stored on the order line, never returned to the packer's browser.
 async function loadPricing(role: string | null, supabase: Supabase) {
-  const client = role === "admin" ? supabase : createServiceRoleClient();
+  const client = role === "admin" || role === "engagement" ? supabase : createServiceRoleClient();
   return Promise.all([loadPriceItemRecords(client), loadPriceTierRecords(client)]);
 }
 
@@ -60,8 +60,9 @@ export async function parseOrderBatchDraft(
   rawText: string,
   placedAtIst: string,
 ): Promise<{ ok: true; drafts: OrderDraft[] } | { ok: false; error: string }> {
-  const profile = await requireRole(["admin", "packer"]);
-  const showPrices = profile.role === "admin";
+  const profile = await requireRole(["admin", "packer", "engagement"]);
+  // The engagement role quotes prices to members, so it sees them too.
+  const showPrices = profile.role === "admin" || profile.role === "engagement";
 
   if (!rawText.trim()) {
     return { ok: false, error: "Paste an order first." };
@@ -130,7 +131,7 @@ export interface SaveOrderInput {
 export async function saveOrder(
   input: SaveOrderInput,
 ): Promise<{ ok: true; orderId: string } | { ok: false; error: string }> {
-  const profile = await requireRole(["admin", "packer"]);
+  const profile = await requireRole(["admin", "packer", "engagement"]);
 
   if (input.lines.length === 0) {
     return { ok: false, error: "No line items to save." };

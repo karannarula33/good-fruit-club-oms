@@ -1,19 +1,21 @@
 // One-off admin script to provision a staff login (CLAUDE.md §2: accounts
 // are admin-provisioned, no self-serve signup). Uses the Supabase Admin API
-// with phone_confirm: true, so no SMS is ever sent.
+// with phone_confirm: true, so no SMS is ever sent. The password you set is
+// temporary: the OMS nudges the person to change it until they do
+// (app_metadata.must_change_password, see src/app/actions/account.ts).
 //
-// Run with: npm run create:staff-user -- <phone> <password> "<full name>" <admin|packer|delivery>
+// Run with: npm run create:staff-user -- <phone> <password> "<full name>" <admin|packer|delivery|engagement>
 
 import { createServiceRoleClient } from "../src/lib/supabase/service-role";
 import { toE164 } from "../src/lib/phone";
 import type { Role } from "../src/lib/supabase/database.types";
 
-const VALID_ROLES: Role[] = ["admin", "packer", "delivery"];
+const VALID_ROLES: Role[] = ["admin", "packer", "delivery", "engagement"];
 
 async function main() {
   const [phoneArg, password, fullName, role] = process.argv.slice(2);
   if (!phoneArg || !password || !fullName || !role) {
-    console.error('Usage: npm run create:staff-user -- <phone> <password> "<full name>" <admin|packer|delivery>');
+    console.error('Usage: npm run create:staff-user -- <phone> <password> "<full name>" <admin|packer|delivery|engagement>');
     process.exitCode = 1;
     return;
   }
@@ -36,6 +38,7 @@ async function main() {
     password,
     phone_confirm: true,
     user_metadata: { full_name: fullName },
+    app_metadata: { must_change_password: true },
   });
   if (error || !data.user) {
     console.error(`Failed to create auth user: ${error?.message}`);

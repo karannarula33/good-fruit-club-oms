@@ -5,7 +5,9 @@
 // read-only price lookups when a packer saves an order (src/app/actions/orders.ts),
 // bill generation by a packer with billing access (src/app/actions/bills.ts,
 // src/lib/auth/billing-access.ts), and admin edits to a billed order, which
-// rewrite the append-only bill/ledger rows (src/app/actions/bill-edit.ts).
+// rewrite the append-only bill/ledger rows (src/app/actions/bill-edit.ts), and
+// Learn GFC (src/app/actions/training.ts, src/lib/training/load.ts), whose
+// learners may only read their own rows so the server grades and records.
 
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";

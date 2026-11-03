@@ -17,7 +17,10 @@ import { RecomputePanel } from "./recompute-panel";
 // (over eng_nudge_queue, scoped to breaking/third_order_risk, now with
 // drafted messages per §9).
 export default async function AdminEngagementPage() {
-  await requireRole(["admin"]);
+  // The engagement role works the queue; refresh and the seasonal note stay
+  // with the admin.
+  const profile = await requireRole(["admin", "engagement"]);
+  const isAdmin = profile.role === "admin";
 
   const supabase = await createClient();
   const todayIso = utcToIstDatetimeLocal(new Date()).slice(0, 10);
@@ -123,8 +126,8 @@ export default async function AdminEngagementPage() {
   return (
     <div className="flex flex-col gap-6 px-[18px] pt-5 pb-6">
       <PageHeader title="Engagement" subtitle="Who to reach out to, and why" />
-      <RecomputePanel computedAt={computedAt} hasConfig={config !== null} stateCounts={stateCounts} />
-      <SeasonalNoteEditor initialNote={settingsRow?.seasonal_note ?? null} />
+      {isAdmin && <RecomputePanel computedAt={computedAt} hasConfig={config !== null} stateCounts={stateCounts} />}
+      {isAdmin && <SeasonalNoteEditor initialNote={settingsRow?.seasonal_note ?? null} />}
       <NudgeQueue rows={nudgeRows} />
       <div className="flex flex-col gap-3">
         <p className="font-sans text-[13px] font-bold text-muted">All customers by priority</p>

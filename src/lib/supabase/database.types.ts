@@ -3,7 +3,7 @@
 //   supabase gen types typescript --linked > src/lib/supabase/database.types.ts
 // and delete this comment.
 
-export type Role = "admin" | "packer" | "delivery";
+export type Role = "admin" | "packer" | "delivery" | "engagement";
 export type UnitType = "weight" | "count";
 // Free text since 0039: mirrors customers.area ("Unassigned" when unknown).
 export type CustomerZone = string;
@@ -30,6 +30,8 @@ export type LedgerMode = "cash" | "upi" | "other";
 export type NudgeRecommendedAction = "message" | "call" | "skip_no_phone";
 export type NudgeStatus = "pending" | "approved" | "edited" | "relayed" | "skipped" | "snoozed" | "expired";
 export type SuppressionReason = "complaint" | "requested_no_contact" | "two_unanswered";
+export type TrainingStatus = "not_started" | "in_progress" | "completed" | "needs_review";
+export type TrainingEventType = "viewed" | "try_it_done" | "reset";
 
 export interface Database {
   public: {
@@ -973,6 +975,213 @@ export interface Database {
           seasonal_note?: string | null;
           updated_at?: string | null;
           updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      training_modules: {
+        Row: {
+          id: string;
+          slug: string;
+          title: string;
+          summary: string;
+          order_index: number;
+          content_md: string;
+          version: number;
+          is_active: boolean;
+          updated_at: string;
+          updated_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          slug: string;
+          title: string;
+          summary?: string;
+          order_index: number;
+          content_md?: string;
+          version?: number;
+          is_active?: boolean;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          slug?: string;
+          title?: string;
+          summary?: string;
+          order_index?: number;
+          content_md?: string;
+          version?: number;
+          is_active?: boolean;
+          updated_at?: string;
+          updated_by?: string | null;
+        };
+        Relationships: [];
+      };
+      training_questions: {
+        Row: {
+          id: string;
+          module_id: string;
+          order_index: number;
+          kind: "mcq" | "scenario";
+          scenario: string | null;
+          prompt: string;
+          options: string[];
+          correct_index: number;
+          explanation: string;
+          is_active: boolean;
+        };
+        Insert: {
+          id?: string;
+          module_id: string;
+          order_index?: number;
+          kind?: "mcq" | "scenario";
+          scenario?: string | null;
+          prompt: string;
+          options: string[];
+          correct_index: number;
+          explanation?: string;
+          is_active?: boolean;
+        };
+        Update: {
+          id?: string;
+          module_id?: string;
+          order_index?: number;
+          kind?: "mcq" | "scenario";
+          scenario?: string | null;
+          prompt?: string;
+          options?: string[];
+          correct_index?: number;
+          explanation?: string;
+          is_active?: boolean;
+        };
+        Relationships: [];
+      };
+      training_assignments: {
+        Row: {
+          user_id: string;
+          assigned_at: string;
+          assigned_by: string | null;
+        };
+        Insert: {
+          user_id: string;
+          assigned_at?: string;
+          assigned_by?: string | null;
+        };
+        Update: {
+          user_id?: string;
+          assigned_at?: string;
+          assigned_by?: string | null;
+        };
+        Relationships: [];
+      };
+      training_progress: {
+        Row: {
+          user_id: string;
+          module_id: string;
+          status: TrainingStatus;
+          started_at: string | null;
+          completed_at: string | null;
+          acknowledged_at: string | null;
+          acknowledged_version: number | null;
+          completed_version: number | null;
+          module_version: number | null;
+          best_score: number | null;
+          updated_at: string;
+        };
+        Insert: {
+          user_id: string;
+          module_id: string;
+          status?: TrainingStatus;
+          started_at?: string | null;
+          completed_at?: string | null;
+          acknowledged_at?: string | null;
+          acknowledged_version?: number | null;
+          completed_version?: number | null;
+          module_version?: number | null;
+          best_score?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          user_id?: string;
+          module_id?: string;
+          status?: TrainingStatus;
+          started_at?: string | null;
+          completed_at?: string | null;
+          acknowledged_at?: string | null;
+          acknowledged_version?: number | null;
+          completed_version?: number | null;
+          module_version?: number | null;
+          best_score?: number | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      training_attempts: {
+        Row: {
+          id: string;
+          user_id: string;
+          module_id: string;
+          module_version: number;
+          score: number;
+          correct: number;
+          total: number;
+          passed: boolean;
+          answers: { questionId: string; chosen: number | null; correct: boolean }[];
+          attempted_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          module_id: string;
+          module_version: number;
+          score: number;
+          correct: number;
+          total: number;
+          passed: boolean;
+          answers: { questionId: string; chosen: number | null; correct: boolean }[];
+          attempted_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          module_id?: string;
+          module_version?: number;
+          score?: number;
+          correct?: number;
+          total?: number;
+          passed?: boolean;
+          answers?: { questionId: string; chosen: number | null; correct: boolean }[];
+          attempted_at?: string;
+        };
+        Relationships: [];
+      };
+      training_events: {
+        Row: {
+          id: string;
+          user_id: string;
+          module_id: string;
+          module_version: number;
+          screen_index: number | null;
+          event: TrainingEventType;
+          at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          module_id: string;
+          module_version: number;
+          screen_index?: number | null;
+          event: TrainingEventType;
+          at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          module_id?: string;
+          module_version?: number;
+          screen_index?: number | null;
+          event?: TrainingEventType;
+          at?: string;
         };
         Relationships: [];
       };
