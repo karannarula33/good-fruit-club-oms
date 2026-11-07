@@ -7,6 +7,7 @@ import { ChevronLeft, PackageCheck, Ban, MessageCircle, XCircle, Pencil, Plus, T
 import { finalizeOrder } from "@/app/actions/packing";
 import { generateBill, overrideLinePrice, overrideLineQuantity } from "@/app/actions/bills";
 import { addPackedLine, removePackedLine } from "@/app/actions/packed-edit";
+import { addToPackLine, cancelToPackOrder, removeToPackLine, updateToPackLineQty } from "@/app/actions/pack-edit";
 import { addBilledLine, editBilledLine, removeBilledLine, type BillEditResult } from "@/app/actions/bill-edit";
 import { updateCustomerSalutation } from "@/app/actions/customers";
 import { toWhatsAppDigits } from "@/lib/phone";
@@ -41,6 +42,7 @@ export interface PackingLine {
 export interface PackingOrder {
   id: string;
   status: OrderStatus;
+  cancelReason?: string | null;
   hasBill: boolean;
   customerId: string;
   customerName: string;
@@ -189,9 +191,23 @@ function EditableDetail({
   // on some line) -- not saved until finalize. Keyed by a client tempId so
   // later lines can pick "the box I just made" before it has a real uuid.
   const [newPackages, setNewPackages] = useState<{ tempId: string; packagingType: PackagingType }[]>([]);
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
+
+  const router = useRouter();
+  const blankState = (line?: PackingLine): LineState => ({
+    resolution: "pending",
+    actualQty: "",
+    packageRef: line?.packageId ?? "",
+    addSubstitute: false,
+    substituteProductId: "",
+    substituteQty: "",
+    substitutePackageRef: "",
+  });
+  // Items added from this screen after it opened get a fresh state.
+  const stateOf = (line: PackingLine): LineState => lineStates[line.id] ?? blankState(line);
 
   function updateLine(lineId: string, patch: Partial<LineState>) {
-    setLineStates((prev) => ({ ...prev, [lineId]: { ...prev[lineId], ...patch } }));
+    setLineStates((prev) => ({ ...prev, [lineId]: { ...(prev[lineId] ?? blankState()), ...patch } }));
   }
 
   // Every box/packet available to assign a line to: already-saved ones from
@@ -203,7 +219,7 @@ function EditableDetail({
     ...newPackages.map((p) => ({ ref: p.tempId, packagingType: p.packagingType })),
   ].map((p) => {
     const contents = order.lines
-      .filter((line) => lineStates[line.id]?.packageRef === p.ref)
+      .filter((line) => stateOf(line).packageRef === p.ref)
       .map((line) => line.productName);
     return { ...p, contents };
   });
@@ -244,13 +260,13 @@ function EditableDetail({
     return tempId;
   }
 
-  const pendingLines = order.lines.filter((l) => lineStates[l.id]?.resolution === "pending");
+  const pendingLines = order.lines.filter((l) => stateOf(l).resolution === "pending");
   const invalidPackedLines = order.lines.filter((l) => {
-    const s = lineStates[l.id];
+    const s = stateOf(l);
     return s.resolution === "packed" && !(Number(s.actualQty) > 0);
   });
   const invalidSubLines = order.lines.filter((l) => {
-    const s = lineStates[l.id];
+    const s = stateOf(l);
     return s.resolution === "unavailable" && s.addSubstitute && !(s.substituteProductId !== "" && Number(s.substituteQty) > 0);
   });
   const canFinalize = pendingLines.length === 0 && invalidPackedLines.length === 0 && invalidSubLines.length === 0;
@@ -259,7 +275,7 @@ function EditableDetail({
     setError(null);
     startTransition(async () => {
       const resolutions = order.lines.map((line) => {
-        const s = lineStates[line.id];
+        const s = stateOf(line);
         return {
           lineId: line.id,
           resolution: s.resolution as "packed" | "unavailable",
@@ -268,12 +284,12 @@ function EditableDetail({
         };
       });
       const substitutions = order.lines
-        .filter((line) => lineStates[line.id].resolution === "unavailable" && lineStates[line.id].addSubstitute)
+        .filter((line) => stateOf(line).resolution === "unavailable" && stateOf(line).addSubstitute)
         .map((line) => ({
           substitutedForLineId: line.id,
-          productId: lineStates[line.id].substituteProductId,
-          actualQty: Number(lineStates[line.id].substituteQty),
-          packageRef: lineStates[line.id].substitutePackageRef,
+          productId: stateOf(line).substituteProductId,
+          actualQty: Number(stateOf(line).substituteQty),
+          packageRef: stateOf(line).substitutePackageRef,
         }));
       const result = await finalizeOrder(order.id, resolutions, substitutions, newPackages);
       if (!result.ok) {
@@ -289,7 +305,7 @@ function EditableDetail({
       <DetailHeader title={order.customerName} onBack={onBack} backLabel="Queue" />
       <div className="flex flex-col gap-2.5">
         {order.lines.map((line) => {
-          const state = lineStates[line.id];
+          const state = stateOf(line);
           return (
             <div key={line.id} className="space-y-2">
               <SwipeableLineRow
@@ -306,10 +322,26 @@ function EditableDetail({
                     <div className={cn("font-sans text-[15px] font-bold", state.resolution === "unavailable" ? "text-tertiary line-through" : "text-foreground")}>
                       {line.productName}
                     </div>
-                    <div className="font-sans text-[11.5px] font-semibold text-muted">
-                      Target {line.orderedQty ?? "—"} {line.orderedUnit ?? line.unitLabel ?? ""}
+                    <div className="flex items-center gap-2">
+                      <div className="font-sans text-[11.5px] font-semibold text-muted">
+                        Target {line.orderedQty ?? "—"} {line.orderedUnit ?? line.unitLabel ?? ""}
+                      </div>
+                      <ToPackLineEditToggle
+                        open={editingLineId === line.id}
+                        onToggle={() => setEditingLineId(editingLineId === line.id ? null : line.id)}
+                      />
                     </div>
                   </div>
+                  {editingLineId === line.id && (
+                    <ToPackLineEditor
+                      orderId={order.id}
+                      line={line}
+                      onDone={() => {
+                        setEditingLineId(null);
+                        router.refresh();
+                      }}
+                    />
+                  )}
                   {state.resolution === "packed" && (
                     <>
                       <Input
@@ -407,6 +439,8 @@ function EditableDetail({
         })}
       </div>
 
+      <ToPackAddItem orderId={order.id} products={products} onChanged={() => router.refresh()} />
+
       {error && <FormError>{error}</FormError>}
       {!canFinalize && (
         <div className="font-sans text-xs font-semibold text-danger-text space-y-0.5">
@@ -418,7 +452,251 @@ function EditableDetail({
       <Button variant="dark" fullWidth disabled={!canFinalize} onClick={handleFinalize} pending={pending} pendingText="Packing…">
         Pack & Close Order
       </Button>
+      <CancelToPackOrder orderId={order.id} onCancelled={onBack} />
     </div>
+  );
+}
+
+// Pencil on a to-pack item: opens the quantity / remove editor below it.
+function ToPackLineEditToggle({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-label={open ? "Close item editor" : "Change or remove this item"}
+      className={cn(
+        "flex size-7 items-center justify-center rounded-lg",
+        open ? "bg-foreground text-white" : "bg-neutral-bg text-neutral-text",
+      )}
+    >
+      <Pencil className="size-3.5" aria-hidden="true" />
+    </button>
+  );
+}
+
+// Change what the customer ordered (quantity), or take the item off the
+// order -- for when the customer changed their mind. Not for stock problems:
+// that's "Unavailable".
+function ToPackLineEditor({ orderId, line, onDone }: { orderId: string; line: PackingLine; onDone: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [qty, setQty] = useState(line.orderedQty !== null ? String(line.orderedQty) : "");
+  const [confirmRemove, setConfirmRemove] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  function run(fn: () => Promise<{ ok: true } | { ok: false; error: string }>) {
+    setError(null);
+    startTransition(async () => {
+      const r = await fn();
+      if (!r.ok) setError(r.error);
+      else onDone();
+    });
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl border border-neutral-200 p-2.5 dark:border-neutral-700">
+      <div className="flex items-center gap-2">
+        <Input
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step={line.unitType === "weight" ? "0.001" : "1"}
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          className="w-24"
+          aria-label="New ordered quantity"
+        />
+        <span className="font-sans text-[12px] font-semibold text-muted">{line.orderedUnit ?? line.unitLabel ?? ""}</span>
+        <Button
+          variant="dark"
+          size="sm"
+          pending={pending && !confirmRemove}
+          disabled={pending || !(Number(qty) > 0) || Number(qty) === line.orderedQty}
+          onClick={() => run(() => updateToPackLineQty(orderId, line.id, Number(qty)))}
+        >
+          Save qty
+        </Button>
+      </div>
+      {!confirmRemove ? (
+        <button
+          type="button"
+          onClick={() => setConfirmRemove(true)}
+          className="flex items-center gap-1.5 font-sans text-[12px] font-bold text-danger-text"
+        >
+          <Trash2 className="size-3.5" aria-hidden="true" /> Remove item from order
+        </button>
+      ) : (
+        <div className="flex items-center gap-3 font-sans text-[12px] font-bold">
+          <span className="text-muted">Customer doesn&apos;t want it?</span>
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => run(() => removeToPackLine(orderId, line.id))}
+            className="text-danger-text"
+          >
+            {pending ? "Removing…" : "Yes, remove"}
+          </button>
+          <button type="button" onClick={() => setConfirmRemove(false)} className="text-muted">
+            Keep
+          </button>
+        </div>
+      )}
+      {error && <FormError>{error}</FormError>}
+    </div>
+  );
+}
+
+// A new item on an order that's still to be packed. Priced on the server from
+// the price list (packers never see prices).
+function ToPackAddItem({
+  orderId,
+  products,
+  onChanged,
+}: {
+  orderId: string;
+  products: { id: string; name: string; unitLabel?: string | null }[];
+  onChanged: () => void;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [productId, setProductId] = useState("");
+  const [qty, setQty] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const unit = products.find((p) => p.id === productId)?.unitLabel ?? "";
+
+  function handleAdd() {
+    const n = Number(qty);
+    if (!productId) return setError("Pick an item.");
+    if (!Number.isFinite(n) || n <= 0) return setError("Enter a quantity greater than zero.");
+    setError(null);
+    startTransition(async () => {
+      const result = await addToPackLine(orderId, productId, n);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      setOpen(false);
+      setProductId("");
+      setQty("");
+      onChanged();
+    });
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="flex items-center justify-center gap-1.5 rounded-2xl border border-dashed border-neutral-300 py-2.5 font-sans text-[12.5px] font-bold text-muted dark:border-neutral-700"
+      >
+        <Plus className="size-4" aria-hidden="true" />
+        Add item to order
+      </button>
+    );
+  }
+  return (
+    <Card elevated className="!space-y-2">
+      <select
+        value={productId}
+        onChange={(e) => setProductId(e.target.value)}
+        className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 font-sans text-sm dark:border-neutral-700 dark:bg-neutral-900"
+        aria-label="Item to add"
+      >
+        <option value="">Pick an item…</option>
+        {products.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.name}
+          </option>
+        ))}
+      </select>
+      <div className="flex items-center gap-2">
+        <Input
+          size="lg"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          placeholder="Qty ordered"
+          value={qty}
+          onChange={(e) => setQty(e.target.value)}
+          className="w-32"
+        />
+        <span className="font-sans text-[12.5px] font-semibold text-muted">{unit}</span>
+      </div>
+      {error && <FormError>{error}</FormError>}
+      <div className="flex gap-2">
+        <Button variant="secondary" fullWidth onClick={() => setOpen(false)} disabled={pending}>
+          Cancel
+        </Button>
+        <Button variant="dark" fullWidth onClick={handleAdd} pending={pending} pendingText="Adding…">
+          Add
+        </Button>
+      </div>
+    </Card>
+  );
+}
+
+// Cancel the whole order (customer cancelled, duplicate, etc.). It stays on
+// record as Cancelled with the reason and who did it; only the admin can
+// delete orders.
+function CancelToPackOrder({ orderId, onCancelled }: { orderId: string; onCancelled: () => void }) {
+  const router = useRouter();
+  const { showToast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mx-auto mt-1 flex items-center gap-1.5 font-sans text-[12.5px] font-bold text-danger-text"
+      >
+        <Ban className="size-4" aria-hidden="true" /> Cancel this order
+      </button>
+    );
+  }
+  return (
+    <Card elevated className="!space-y-2">
+      <div className="font-sans text-[14px] font-bold text-foreground">Cancel this order?</div>
+      <textarea
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        rows={2}
+        maxLength={300}
+        placeholder="Reason (e.g. customer cancelled, duplicate order)"
+        className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 font-sans text-sm dark:border-neutral-700 dark:bg-neutral-900"
+        aria-label="Reason for cancelling"
+      />
+      {error && <FormError>{error}</FormError>}
+      <div className="flex gap-2">
+        <Button variant="secondary" fullWidth onClick={() => setOpen(false)} disabled={pending}>
+          Keep order
+        </Button>
+        <Button
+          variant="destructive"
+          fullWidth
+          disabled={reason.trim().length < 3}
+          pending={pending}
+          pendingText="Cancelling…"
+          onClick={() =>
+            startTransition(async () => {
+              setError(null);
+              const r = await cancelToPackOrder(orderId, reason);
+              if (!r.ok) {
+                setError(r.error);
+                return;
+              }
+              showToast("Order cancelled");
+              onCancelled();
+              router.refresh();
+            })
+          }
+        >
+          Cancel order
+        </Button>
+      </div>
+    </Card>
   );
 }
 
@@ -1106,7 +1384,9 @@ function CancelledDetail({ order, onBack }: { order: PackingOrder; onBack: () =>
         </div>
         <div className="font-display text-[17px] font-bold text-foreground">Dropped / Cancelled</div>
         <div className="max-w-[260px] font-sans text-[13px] leading-[1.6] text-muted">
-          All items were marked unavailable — this order was not packed or billed.
+          {order.cancelReason
+            ? <>Cancelled: &ldquo;{order.cancelReason}&rdquo;</>
+            : "All items were marked unavailable — this order was not packed or billed."}
         </div>
       </div>
       <Button variant="secondary" fullWidth onClick={onBack}>

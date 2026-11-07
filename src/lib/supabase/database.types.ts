@@ -242,6 +242,8 @@ export interface Database {
           raw_paste: string | null;
           notes: string | null;
           undelivered_reason: string | null;
+          cancel_reason: string | null;
+          cancelled_by: string | null;
           created_by: string | null;
           created_at: string;
           is_historical: boolean;
@@ -257,6 +259,8 @@ export interface Database {
           raw_paste?: string | null;
           notes?: string | null;
           undelivered_reason?: string | null;
+          cancel_reason?: string | null;
+          cancelled_by?: string | null;
           created_by?: string | null;
           created_at?: string;
           is_historical?: boolean;
@@ -272,6 +276,8 @@ export interface Database {
           raw_paste?: string | null;
           notes?: string | null;
           undelivered_reason?: string | null;
+          cancel_reason?: string | null;
+          cancelled_by?: string | null;
           created_by?: string | null;
           created_at?: string;
           is_historical?: boolean;
