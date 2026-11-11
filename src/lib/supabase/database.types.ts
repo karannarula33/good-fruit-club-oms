@@ -10,6 +10,7 @@ export type CustomerZone = string;
 export type City = "Gurgaon" | "Delhi" | "Noida" | "Faridabad" | "Ghaziabad" | "Other";
 export type AreaSource = "auto" | "manual";
 export type DiscountType = "amount" | "percent";
+export type OrderSource = "manual" | "website";
 export type OrderChannel = "website" | "whatsapp";
 export type OrderStatus =
   | "recorded"
@@ -255,6 +256,11 @@ export interface Database {
           discount_set_by: string | null;
           discount_set_at: string | null;
           duplicated_from: string | null;
+          source: OrderSource;
+          external_ref: string | null;
+          delivery_charge: number;
+          prepaid_amount: number | null;
+          prepaid_credit_id: string | null;
         };
         Insert: {
           id?: string;
@@ -278,6 +284,11 @@ export interface Database {
           discount_set_by?: string | null;
           discount_set_at?: string | null;
           duplicated_from?: string | null;
+          source?: OrderSource;
+          external_ref?: string | null;
+          delivery_charge?: number;
+          prepaid_amount?: number | null;
+          prepaid_credit_id?: string | null;
         };
         Update: {
           id?: string;
@@ -301,6 +312,11 @@ export interface Database {
           discount_set_by?: string | null;
           discount_set_at?: string | null;
           duplicated_from?: string | null;
+          source?: OrderSource;
+          external_ref?: string | null;
+          delivery_charge?: number;
+          prepaid_amount?: number | null;
+          prepaid_credit_id?: string | null;
         };
         Relationships: [];
       };

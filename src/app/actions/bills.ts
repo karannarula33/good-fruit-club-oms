@@ -16,6 +16,7 @@ import { classifySalutation } from "@/lib/parser/classify-salutation";
 import { billedQuantity, validateBilledQty } from "@/lib/billing/qty";
 import { giftPackingBillLine, giftPackingCharge, loadGiftPackingCount } from "@/lib/billing/gift-packing";
 import { applyDiscount, discountLabel, toOrderDiscount } from "@/lib/billing/discount";
+import { deliveryBillLine } from "@/lib/billing/delivery";
 
 export type GenerateBillResult =
   // paymentLinkError: the bill was made but its Razorpay link couldn't be;
@@ -50,7 +51,7 @@ async function generateBillWith(
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("id, delivery_date, customer_id, discount_type, discount_value")
+    .select("id, delivery_date, customer_id, discount_type, discount_value, delivery_charge, prepaid_credit_id")
     .eq("id", orderId)
     .single();
   if (orderError || !order) {
@@ -179,7 +180,9 @@ async function generateBillWith(
   if (gift.error) return { ok: false, reason: "error", error: gift.error };
   // Order discount set on Manage Orders (src/lib/billing/discount.ts).
   const orderDiscount = toOrderDiscount(order.discount_type, order.discount_value);
-  const { total, discount } = applyDiscount(lineTotal + giftPackingCharge(gift.count), orderDiscount);
+  // A website order's delivery fee is billed as its own line (0045).
+  const deliveryCharge = Number(order.delivery_charge ?? 0);
+  const { total, discount } = applyDiscount(lineTotal + giftPackingCharge(gift.count) + deliveryCharge, orderDiscount);
 
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from("ledger_entries")
@@ -207,6 +210,8 @@ async function generateBillWith(
   });
   const giftLine = giftPackingBillLine(gift.count);
   if (giftLine) billLines.push(giftLine);
+  const deliveryLine = deliveryBillLine(deliveryCharge);
+  if (deliveryLine) billLines.push(deliveryLine);
 
   // CLAUDE.md §3.7: an existing advance auto-allocates, oldest-first, the
   // next time a bill finalizes -- purely additive bookkeeping for deriving
@@ -214,7 +219,12 @@ async function generateBillWith(
   // netDue above, which already account for every credit regardless of
   // allocation state. Planned here (written after the bill) because the
   // payment link only asks for what the advance doesn't cover.
-  const creditRows = (ledgerRows ?? []).filter((row) => row.entry_type === "credit");
+  // A website order's online payment is kept for that order: used first on
+  // its own bill, and not used by any other bill while it's unbilled.
+  const reservedCreditIds = await reservedPrepaidCredits(supabase, order.customer_id, orderId);
+  const creditRows = (ledgerRows ?? []).filter(
+    (row) => row.entry_type === "credit" && !reservedCreditIds.has(row.id),
+  );
   let allocationPlan: ReturnType<typeof planAdvanceAllocation> = [];
   if (creditRows.length > 0) {
     const creditIds = creditRows.map((row) => row.id);
@@ -235,7 +245,7 @@ async function generateBillWith(
       allocatedSoFar: allocatedByCredit.get(row.id) ?? 0,
       createdAt: new Date(row.created_at),
     }));
-    allocationPlan = planAdvanceAllocation({ advances, billTotal: total });
+    allocationPlan = planAdvanceAllocation({ advances, billTotal: total, priorityId: order.prepaid_credit_id });
   }
 
   // Razorpay link for this order's unpaid amount (admin, 2026-10-09: the
@@ -316,6 +326,26 @@ async function generateBillWith(
   // src/app/actions/packing.ts. The packer needs the "Send bill" button
   // to stay on screen until they explicitly tap "Done".
   return { ok: true, messageText, customerPhone: customer.phone, paymentLinkError };
+}
+
+// Online payments of this customer's OTHER website orders that aren't billed
+// yet (orders.prepaid_credit_id): those are theirs, not this bill's.
+async function reservedPrepaidCredits(
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createServiceRoleClient>,
+  customerId: string,
+  orderId: string,
+): Promise<Set<string>> {
+  const { data: others } = await supabase
+    .from("orders")
+    .select("id, prepaid_credit_id")
+    .eq("customer_id", customerId)
+    .neq("id", orderId)
+    .neq("status", "cancelled")
+    .not("prepaid_credit_id", "is", null);
+  if (!others?.length) return new Set();
+  const { data: billed } = await supabase.from("bills").select("order_id").in("order_id", others.map((o) => o.id));
+  const billedIds = new Set((billed ?? []).map((b) => b.order_id));
+  return new Set(others.filter((o) => !billedIds.has(o.id)).map((o) => o.prepaid_credit_id as string));
 }
 
 export type OverrideLinePriceResult = { ok: true } | { ok: false; error: string };

@@ -18,6 +18,7 @@ import { computeBillTotal, computeNetDue, roundLineAmount, roundToCents } from "
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
 import { giftPackingBillLine, giftPackingCharge, loadGiftPackingCount } from "@/lib/billing/gift-packing";
 import { applyDiscount, discountLabel, toOrderDiscount } from "@/lib/billing/discount";
+import { deliveryBillLine } from "@/lib/billing/delivery";
 import { unpaidForOrder } from "@/lib/billing/payment-link";
 import { cancelPaymentLink, createPaymentLink, paymentLinksEnabled } from "@/lib/razorpay/payment-links";
 import { validateDiscount } from "@/lib/billing/discount";
@@ -187,7 +188,7 @@ export async function getBillMessage(orderId: string): Promise<BillEditResult> {
 async function rebuildBill(supabase: Client, orderId: string): Promise<BillEditResult> {
   const { data: order } = await supabase
     .from("orders")
-    .select("id, customer_id, delivery_date, discount_type, discount_value")
+    .select("id, customer_id, delivery_date, discount_type, discount_value, delivery_charge")
     .eq("id", orderId)
     .single();
   if (!order) return { ok: false, error: "Order not found." };
@@ -218,7 +219,8 @@ async function rebuildBill(supabase: Client, orderId: string): Promise<BillEditR
   );
   if (unpricedLineCount > 0) return { ok: false, error: `${unpricedLineCount} item(s) on this bill have no rate — set one first.` };
   const orderDiscount = toOrderDiscount(order.discount_type, order.discount_value);
-  const { total, discount } = applyDiscount(roundToCents(lineTotal + giftPackingCharge(gift.count)), orderDiscount);
+  const deliveryCharge = Number(order.delivery_charge ?? 0);
+  const { total, discount } = applyDiscount(roundToCents(lineTotal + giftPackingCharge(gift.count) + deliveryCharge), orderDiscount);
 
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from("ledger_entries")
@@ -281,6 +283,8 @@ async function rebuildBill(supabase: Client, orderId: string): Promise<BillEditR
   });
   const giftLine = giftPackingBillLine(gift.count);
   if (giftLine) billLines.push(giftLine);
+  const deliveryLine = deliveryBillLine(deliveryCharge);
+  if (deliveryLine) billLines.push(deliveryLine);
   const messageText = buildBillMessage({
     salutation: customer.salutation === "Sir" ? "Sir" : "Ma'am",
     deliveryDate: order.delivery_date,

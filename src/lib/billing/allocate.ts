@@ -20,13 +20,17 @@ export interface AllocationPlanItem {
   amount: number;
 }
 
+// priorityId: a credit used first whatever its date -- a website order's own
+// online payment (orders.prepaid_credit_id, src/lib/website/ingest.ts).
 export function planAdvanceAllocation(params: {
   advances: AdvanceCredit[];
   billTotal: number;
+  priorityId?: string | null;
 }): AllocationPlanItem[] {
+  const first = (a: AdvanceCredit) => (params.priorityId && a.ledgerEntryId === params.priorityId ? 0 : 1);
   const sorted = [...params.advances]
     .filter((advance) => roundToCents(advance.amount - advance.allocatedSoFar) > 0)
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+    .sort((a, b) => first(a) - first(b) || a.createdAt.getTime() - b.createdAt.getTime());
 
   const plan: AllocationPlanItem[] = [];
   let remaining = params.billTotal;

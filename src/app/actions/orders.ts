@@ -12,6 +12,7 @@ import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
 import { resolveTieredPriceForProduct } from "@/lib/pricing/resolve";
 import { deriveDeliveryDate } from "@/lib/orders/delivery-date";
 import { deriveZoneFromAddress } from "@/lib/customers/zone";
+import { siteOrderNumbers } from "@/lib/website/ingest";
 import {
   parseOrderBatchPaste,
   type CustomerEntry,
@@ -145,6 +146,19 @@ export async function saveOrder(
   const supabase = await createClient();
   const placedAtUtc = istWallClockToUtc(input.placedAtIst);
 
+  // Website orders now arrive by themselves (src/app/api/website/orders):
+  // pasting one that's already here would double it.
+  const siteNumbers = siteOrderNumbers(input.rawText);
+  if (siteNumbers.length > 0) {
+    const { data: already } = await supabase.from("orders").select("external_ref").in("external_ref", siteNumbers);
+    if (already && already.length > 0) {
+      return {
+        ok: false,
+        error: `Website order ${already.map((o) => o.external_ref).join(", ")} is already in the OMS — it came in from the site automatically.`,
+      };
+    }
+  }
+
   let customerId: string;
   if (input.customer.kind === "existing") {
     customerId = input.customer.customerId;
@@ -179,6 +193,8 @@ export async function saveOrder(
     .eq("customer_id", customerId)
     .eq("delivery_date", input.deliveryDate)
     .eq("status", "recorded")
+    // A website order (sent over by the site, 0045) is kept as it came.
+    .eq("source", "manual")
     // With a duplicated order there can be two open orders that day; a new
     // paste always goes to the original (the earliest).
     .order("created_at", { ascending: true })
