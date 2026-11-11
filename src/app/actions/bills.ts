@@ -15,6 +15,7 @@ import { validatePriceOverride, validateQuantityOverride } from "@/lib/billing/o
 import { classifySalutation } from "@/lib/parser/classify-salutation";
 import { billedQuantity, validateBilledQty } from "@/lib/billing/qty";
 import { giftPackingBillLine, giftPackingCharge, loadGiftPackingCount } from "@/lib/billing/gift-packing";
+import { applyDiscount, discountLabel, toOrderDiscount } from "@/lib/billing/discount";
 
 export type GenerateBillResult =
   // paymentLinkError: the bill was made but its Razorpay link couldn't be;
@@ -49,7 +50,7 @@ async function generateBillWith(
 
   const { data: order, error: orderError } = await supabase
     .from("orders")
-    .select("id, delivery_date, customer_id")
+    .select("id, delivery_date, customer_id, discount_type, discount_value")
     .eq("id", orderId)
     .single();
   if (orderError || !order) {
@@ -176,7 +177,9 @@ async function generateBillWith(
   // ₹400 per gift packing used (src/lib/billing/gift-packing.ts).
   const gift = await loadGiftPackingCount(supabase, lineRows ?? []);
   if (gift.error) return { ok: false, reason: "error", error: gift.error };
-  const total = lineTotal + giftPackingCharge(gift.count);
+  // Order discount set on Manage Orders (src/lib/billing/discount.ts).
+  const orderDiscount = toOrderDiscount(order.discount_type, order.discount_value);
+  const { total, discount } = applyDiscount(lineTotal + giftPackingCharge(gift.count), orderDiscount);
 
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from("ledger_entries")
@@ -263,11 +266,13 @@ async function generateBillWith(
     prevBalance,
     netDue,
     paymentLink,
+    discount: discount > 0 ? { label: discountLabel(orderDiscount), amount: discount } : null,
   });
 
   const { error: billError } = await supabase.from("bills").insert({
     order_id: orderId,
     total,
+    discount,
     prev_balance: prevBalance,
     net_due: netDue,
     message_text: messageText,

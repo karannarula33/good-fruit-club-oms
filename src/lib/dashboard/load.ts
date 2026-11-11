@@ -42,6 +42,13 @@ export async function loadSnapshot(supabase: Client): Promise<Snapshot & { schem
 
   let schemaReady = true;
 
+  // Order discounts (0044); optional so the dashboard loads before that migration.
+  const discountByOrder = new Map<string, number>();
+  const billDiscounts = await pageAll((f, t) =>
+    supabase.from("bills").select("order_id, discount").gt("discount", 0).order("order_id").range(f, t),
+  ).catch(() => []);
+  for (const b of billDiscounts) discountByOrder.set(b.order_id, Number(b.discount));
+
   let products: MProduct[];
   const withCategory = await supabase.from("products").select("id, name, category");
   if (withCategory.error) {
@@ -99,6 +106,7 @@ export async function loadSnapshot(supabase: Client): Promise<Snapshot & { schem
     status: o.status,
     lines: linesByOrder.get(o.id) ?? [],
     channel: o.channel === "website" ? "website" : "whatsapp",
+    discount: discountByOrder.get(o.id) ?? 0,
   }));
 
   return { orders, customers, products, overheads, schemaReady };

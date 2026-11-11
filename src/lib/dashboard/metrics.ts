@@ -10,6 +10,7 @@
 //   * Revenue = sum over SOLD lines of round(billed qty x locked price), the
 //     same per-line rounding the WhatsApp bill uses (roundLineAmount). A sold
 //     line has actual_qty > 0 and is not marked unavailable.
+//   * An order's discount (bills.discount) comes off its revenue.
 //   * Costs: COGS = actual qty x locked COGS per unit (sold lines); packaging,
 //     delivery and labour are the per-line amounts the cost scripts write.
 //   * "Members" = customers. Lifetime figures (LTV, repeat rate, status) are
@@ -41,6 +42,7 @@ export interface MOrder {
   status: string;
   lines: MLine[];
   channel?: "website" | "whatsapp"; // orders.channel (0038); missing = whatsapp
+  discount?: number; // rupees off the bill (bills.discount, 0044); comes off revenue
 }
 
 export interface MCustomer {
@@ -167,6 +169,8 @@ export function orderEconomics(o: MOrder): OrderEconomics {
     if (l.price !== null) revenue += roundLineAmount(l.billedQty ?? l.actualQty!, l.price);
     if (l.cogsPerUnit !== null) cogs += (l.actualQty ?? 0) * l.cogsPerUnit;
   }
+  // An order discount (src/lib/billing/discount.ts) is revenue not earned.
+  if (o.discount && o.discount > 0) revenue = roundToCents(revenue - Math.min(o.discount, revenue));
   return {
     revenue,
     cogs: roundToCents(cogs),

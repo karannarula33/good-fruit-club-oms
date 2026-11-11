@@ -6,6 +6,8 @@ import { Check, MessageCircle, Pencil, Plus, Trash2, X } from "lucide-react";
 import { addOrderLine, deleteOrder, deleteOrderLine, updateOrderLineQty } from "@/app/actions/manage-orders";
 import { addBilledLine, editBilledLine, getBillMessage, removeBilledLine, type BillEditResult } from "@/app/actions/bill-edit";
 import { setOrderChannel } from "@/app/actions/order-channel";
+import { DiscountEditor, DuplicateOrderButton, type OrderDiscountInfo } from "./order-extras";
+import { describeDiscount } from "@/lib/billing/discount";
 import { toWhatsAppDigits } from "@/lib/phone";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -47,6 +49,9 @@ export interface ManageOrderRow {
   lines: ManageOrderLine[];
   packagingSummary: string | null;
   channel: OrderChannel; // website vs WhatsApp, for reporting (migration 0038)
+  discount: OrderDiscountInfo | null; // migration 0044
+  billDiscount: number; // rupees off the current bill
+  isDuplicate: boolean; // a second order copied from another that day
 }
 
 export interface ProductOption {
@@ -315,6 +320,8 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
                 <div className="font-sans text-sm font-bold text-foreground">{row.customerName}</div>
                 <div className="font-sans text-[11.5px] font-semibold text-muted">
                   {row.lines.length} item{row.lines.length === 1 ? "" : "s"}
+                  {row.isDuplicate && <span className="ml-1.5 text-info-text">· 2nd order</span>}
+                  {row.discount && <span className="ml-1.5 text-success-text">· {describeDiscount(row.discount)}</span>}
                 </div>
                 {row.packagingSummary && (
                   <div className="font-sans text-[11px] font-semibold text-tertiary">{row.packagingSummary}</div>
@@ -582,6 +589,16 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
               </button>
             )}
 
+            <DiscountEditor
+              key={openOrder.id}
+              orderId={openOrder.id}
+              discount={openOrder.discount}
+              billDiscount={openOrder.billDiscount}
+              billed={openOrder.hasBill}
+              disabled={openOrder.status === "cancelled"}
+              onBill={(bill) => setBillView(bill)}
+            />
+
             {error && <FormError>{error}</FormError>}
 
             {openOrder.billEditable &&
@@ -612,6 +629,8 @@ export function ManageOrdersList({ rows, products }: { rows: ManageOrderRow[]; p
                   View / send bill
                 </Button>
               ))}
+
+            <DuplicateOrderButton key={`dup-${openOrder.id}`} orderId={openOrder.id} customerName={openOrder.customerName} onDone={closeSheet} />
 
             <Button
               variant="destructive"

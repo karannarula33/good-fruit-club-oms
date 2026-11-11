@@ -17,8 +17,10 @@ import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { computeBillTotal, computeNetDue, roundLineAmount, roundToCents } from "@/lib/billing/compute";
 import { buildBillMessage, type BillLineItem } from "@/lib/billing/message";
 import { giftPackingBillLine, giftPackingCharge, loadGiftPackingCount } from "@/lib/billing/gift-packing";
+import { applyDiscount, discountLabel, toOrderDiscount } from "@/lib/billing/discount";
 import { unpaidForOrder } from "@/lib/billing/payment-link";
 import { cancelPaymentLink, createPaymentLink, paymentLinksEnabled } from "@/lib/razorpay/payment-links";
+import { validateDiscount } from "@/lib/billing/discount";
 import { balanceExcludingOrderDebit, planAllocationTrim, validateBillLineEdit, type BillLineEdit } from "@/lib/billing/edit";
 
 type Client = ReturnType<typeof createServiceRoleClient>;
@@ -127,6 +129,51 @@ export async function addBilledLine(orderId: string, productId: string, qty: num
   return rebuildBill(supabase, orderId);
 }
 
+// Set (or, with null, remove) an order's discount from Manage Orders
+// (src/lib/billing/discount.ts). Before billing it's just stored and applied
+// when the bill is made; on a billed order the bill is rebuilt right away
+// (total, balance, ledger debit, allocations, payment link, WhatsApp text).
+export type DiscountResult =
+  | { ok: true; bill: Extract<BillEditResult, { ok: true }> | null }
+  | { ok: false; error: string };
+
+export async function setOrderDiscount(
+  orderId: string,
+  input: { type: "amount" | "percent"; value: number; reason: string } | null,
+): Promise<DiscountResult> {
+  const profile = await requireRole(["admin"]);
+  const supabase = createServiceRoleClient();
+  const { data: order } = await supabase.from("orders").select("id, status").eq("id", orderId).maybeSingle();
+  if (!order) return { ok: false, error: "Order not found." };
+  if (order.status === "cancelled") return { ok: false, error: "This order is cancelled." };
+
+  let update;
+  if (input === null) {
+    update = { discount_type: null, discount_value: null, discount_reason: null, discount_set_by: profile.id, discount_set_at: new Date().toISOString() };
+  } else {
+    const valid = validateDiscount(input);
+    if (!valid.ok) return valid;
+    update = {
+      discount_type: valid.discount.type,
+      discount_value: valid.discount.value,
+      discount_reason: valid.reason,
+      discount_set_by: profile.id,
+      discount_set_at: new Date().toISOString(),
+    };
+  }
+  const { error } = await supabase.from("orders").update(update).eq("id", orderId);
+  if (error) return { ok: false, error: error.message };
+
+  const { data: bill } = await supabase.from("bills").select("id").eq("order_id", orderId).maybeSingle();
+  if (!bill) {
+    revalidatePath("/admin/manage-orders");
+    return { ok: true, bill: null };
+  }
+  const rebuilt = await rebuildBill(supabase, orderId);
+  if (!rebuilt.ok) return rebuilt;
+  return { ok: true, bill: rebuilt };
+}
+
 // The current bill text, to send it again after an edit.
 export async function getBillMessage(orderId: string): Promise<BillEditResult> {
   await requireRole(["admin"]);
@@ -138,7 +185,11 @@ export async function getBillMessage(orderId: string): Promise<BillEditResult> {
 }
 
 async function rebuildBill(supabase: Client, orderId: string): Promise<BillEditResult> {
-  const { data: order } = await supabase.from("orders").select("id, customer_id, delivery_date").eq("id", orderId).single();
+  const { data: order } = await supabase
+    .from("orders")
+    .select("id, customer_id, delivery_date, discount_type, discount_value")
+    .eq("id", orderId)
+    .single();
   if (!order) return { ok: false, error: "Order not found." };
   const { data: customer } = await supabase
     .from("customers")
@@ -166,7 +217,8 @@ async function rebuildBill(supabase: Client, orderId: string): Promise<BillEditR
     (lineRows ?? []).map((l) => ({ actualQty: Number(l.billed_qty ?? l.actual_qty ?? 0), lockedPricePerUnit: l.locked_price_per_unit })),
   );
   if (unpricedLineCount > 0) return { ok: false, error: `${unpricedLineCount} item(s) on this bill have no rate — set one first.` };
-  const total = roundToCents(lineTotal + giftPackingCharge(gift.count));
+  const orderDiscount = toOrderDiscount(order.discount_type, order.discount_value);
+  const { total, discount } = applyDiscount(roundToCents(lineTotal + giftPackingCharge(gift.count)), orderDiscount);
 
   const { data: ledgerRows, error: ledgerError } = await supabase
     .from("ledger_entries")
@@ -237,12 +289,14 @@ async function rebuildBill(supabase: Client, orderId: string): Promise<BillEditR
     prevBalance,
     netDue,
     paymentLink,
+    discount: discount > 0 ? { label: discountLabel(orderDiscount), amount: discount } : null,
   });
 
   const { error: billError } = await supabase
     .from("bills")
     .update({
       total,
+      discount,
       prev_balance: prevBalance,
       net_due: netDue,
       message_text: messageText,

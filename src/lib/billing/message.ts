@@ -68,8 +68,11 @@ export function buildBillMessage(params: {
   netDue: number;
   // Razorpay payment link for this order's unpaid amount, when one was made.
   paymentLink?: { url: string; amount: number } | null;
+  // Order discount (src/lib/billing/discount.ts): shown as a subtotal and a
+  // discount line above the order total, which is already net of it.
+  discount?: { label: string; amount: number } | null;
 }): string {
-  const { salutation, deliveryDate, lines, total, prevBalance, netDue, paymentLink } = params;
+  const { salutation, deliveryDate, lines, total, prevBalance, netDue, paymentLink, discount } = params;
 
   const lineText =
     lines.length > 0
@@ -91,6 +94,9 @@ export function buildBillMessage(params: {
     "",
     lineText,
     "",
+    ...(discount && discount.amount > 0
+      ? [`Subtotal: ${formatRupees(Math.round((total + discount.amount) * 100) / 100)}`, `${discount.label}: −${formatRupees(discount.amount)}`]
+      : []),
     `Order total: ${formatRupees(total)}`,
     balanceLine,
     `Net amount due: ${formatRupees(netDue)}`,

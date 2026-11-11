@@ -179,6 +179,9 @@ export async function saveOrder(
     .eq("customer_id", customerId)
     .eq("delivery_date", input.deliveryDate)
     .eq("status", "recorded")
+    // With a duplicated order there can be two open orders that day; a new
+    // paste always goes to the original (the earliest).
+    .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
   if (existingOrderError) {

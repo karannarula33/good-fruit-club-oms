@@ -7,6 +7,8 @@ import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
 import { resolveTieredPriceForProduct } from "@/lib/pricing/resolve";
 import { resolveQtyUpdateField, buildNewOrderLineRow, isOrderStatusEditable } from "@/lib/orders/edit-order";
 import { ORDER_STATUS_LABEL } from "@/lib/orders/status-display";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
+import { duplicateLineRows } from "@/lib/orders/duplicate";
 import type { OrderStatus } from "@/lib/supabase/database.types";
 
 // Every mutation in this file goes through here first: an order can be
@@ -146,4 +148,60 @@ export async function deleteOrder(orderId: string): Promise<{ ok: true } | { ok:
 
   revalidatePath("/admin/manage-orders");
   return { ok: true };
+}
+
+// A second, identical order for the same customer on the same delivery date
+// (admin, 2026-11-11: e.g. a second box), kept separate from the original.
+// Copies what was ordered (src/lib/orders/duplicate.ts) as a new "To pack"
+// order; packing, billing, discounts and payments are its own. Later pastes
+// for that customer and day still merge into the original (the earliest
+// open order).
+export async function duplicateOrder(orderId: string): Promise<{ ok: true; orderId: string } | { ok: false; error: string }> {
+  const profile = await requireRole(["admin"]);
+  // Service role: the copy is made in one go even when the original is
+  // already packed or billed, after the admin check above.
+  const supabase = createServiceRoleClient();
+  const { data: source } = await supabase
+    .from("orders")
+    .select("id, customer_id, placed_at, delivery_date, raw_paste, notes, channel")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (!source) return { ok: false, error: "Order not found." };
+  const { data: lines, error: linesError } = await supabase
+    .from("order_lines")
+    .select("product_id, ordered_qty, ordered_unit, locked_price_per_unit, is_gift_box, is_substitution, parse_confidence")
+    .eq("order_id", orderId);
+  if (linesError) return { ok: false, error: linesError.message };
+
+  const { data: copy, error: orderError } = await supabase
+    .from("orders")
+    .insert({
+      customer_id: source.customer_id,
+      placed_at: source.placed_at,
+      delivery_date: source.delivery_date,
+      status: "recorded",
+      raw_paste: source.raw_paste,
+      notes: source.notes,
+      channel: source.channel,
+      created_by: profile.id,
+      duplicated_from: source.id,
+    })
+    .select("id")
+    .single();
+  if (orderError || !copy) return { ok: false, error: orderError?.message ?? "Could not create the copy." };
+
+  const rows = duplicateLineRows(copy.id, lines ?? []);
+  if (rows.length === 0) {
+    await supabase.from("orders").delete().eq("id", copy.id);
+    return { ok: false, error: "This order has no items to copy." };
+  }
+  const { error: insertError } = await supabase.from("order_lines").insert(rows);
+  if (insertError) {
+    await supabase.from("orders").delete().eq("id", copy.id);
+    return { ok: false, error: insertError.message };
+  }
+
+  revalidatePath("/admin/manage-orders");
+  revalidatePath("/packer");
+  return { ok: true, orderId: copy.id };
 }

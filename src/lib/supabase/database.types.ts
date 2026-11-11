@@ -9,6 +9,7 @@ export type UnitType = "weight" | "count";
 export type CustomerZone = string;
 export type City = "Gurgaon" | "Delhi" | "Noida" | "Faridabad" | "Ghaziabad" | "Other";
 export type AreaSource = "auto" | "manual";
+export type DiscountType = "amount" | "percent";
 export type OrderChannel = "website" | "whatsapp";
 export type OrderStatus =
   | "recorded"
@@ -248,6 +249,12 @@ export interface Database {
           created_at: string;
           is_historical: boolean;
           channel: OrderChannel;
+          discount_type: DiscountType | null;
+          discount_value: number | null;
+          discount_reason: string | null;
+          discount_set_by: string | null;
+          discount_set_at: string | null;
+          duplicated_from: string | null;
         };
         Insert: {
           id?: string;
@@ -265,6 +272,12 @@ export interface Database {
           created_at?: string;
           is_historical?: boolean;
           channel?: OrderChannel;
+          discount_type?: DiscountType | null;
+          discount_value?: number | null;
+          discount_reason?: string | null;
+          discount_set_by?: string | null;
+          discount_set_at?: string | null;
+          duplicated_from?: string | null;
         };
         Update: {
           id?: string;
@@ -282,6 +295,12 @@ export interface Database {
           created_at?: string;
           is_historical?: boolean;
           channel?: OrderChannel;
+          discount_type?: DiscountType | null;
+          discount_value?: number | null;
+          discount_reason?: string | null;
+          discount_set_by?: string | null;
+          discount_set_at?: string | null;
+          duplicated_from?: string | null;
         };
         Relationships: [];
       };
@@ -659,6 +678,7 @@ export interface Database {
           payment_link_url: string | null;
           payment_link_amount: number | null;
           payment_link_status: PaymentLinkStatus | null;
+          discount: number;
         };
         Insert: {
           id?: string;
@@ -673,6 +693,7 @@ export interface Database {
           payment_link_url?: string | null;
           payment_link_amount?: number | null;
           payment_link_status?: PaymentLinkStatus | null;
+          discount?: number;
         };
         Update: {
           id?: string;
@@ -687,6 +708,7 @@ export interface Database {
           payment_link_url?: string | null;
           payment_link_amount?: number | null;
           payment_link_status?: PaymentLinkStatus | null;
+          discount?: number;
         };
         Relationships: [];
       };

@@ -43,6 +43,7 @@ export interface PackingOrder {
   id: string;
   status: OrderStatus;
   cancelReason?: string | null;
+  isDuplicate?: boolean; // a second order for this customer that day (Manage Orders)
   hasBill: boolean;
   customerId: string;
   customerName: string;
@@ -124,6 +125,7 @@ function QueueOrderCard({ order, onSelect }: { order: PackingOrder; onSelect: ()
           )}
         >
           {order.customerName}
+          {order.isDuplicate && <span className="ml-1.5 font-sans text-[11px] font-bold text-info-text">2nd order</span>}
         </div>
         <Badge style={displayStatusChipStyle(displayStatus)} size="sm">
           {DISPLAY_STATUS_LABEL[displayStatus]}

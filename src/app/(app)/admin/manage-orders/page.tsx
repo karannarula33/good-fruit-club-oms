@@ -23,7 +23,7 @@ export default async function ManageOrdersPage({
 
   const { data: orders } = await supabase
     .from("orders")
-    .select("id, customer_id, status, channel")
+    .select("id, customer_id, status, channel, discount_type, discount_value, discount_reason, duplicated_from")
     .eq("delivery_date", date)
     .order("created_at", { ascending: false });
 
@@ -50,7 +50,7 @@ export default async function ManageOrdersPage({
     supabase.from("products").select("id, name, unit_label"),
     supabase.from("products").select("id, name, unit_type, unit_label").eq("active", true).order("name"),
     orderIds.length
-      ? supabase.from("bills").select("order_id, total").in("order_id", orderIds)
+      ? supabase.from("bills").select("order_id, total, discount").in("order_id", orderIds)
       : Promise.resolve({ data: [] }),
     orderIds.length
       ? supabase.from("order_packages").select("id, order_id, packaging_type").in("order_id", orderIds)
@@ -60,6 +60,7 @@ export default async function ManageOrdersPage({
   const customerById = new Map((customers ?? []).map((c) => [c.id, c]));
   const productById = new Map((products ?? []).map((p) => [p.id, p]));
   const billByOrderId = new Map((bills ?? []).map((b) => [b.order_id, b.total]));
+  const billDiscountByOrderId = new Map((bills ?? []).map((b) => [b.order_id, Number(b.discount ?? 0)]));
   const totalBilled = (bills ?? []).reduce((sum, b) => sum + b.total, 0);
 
   const packagingSummaryByOrderId = summarizePackagingByOrder(
@@ -115,6 +116,12 @@ export default async function ManageOrdersPage({
       lines,
       packagingSummary: packagingSummaryByOrderId.get(order.id) || null,
       channel: order.channel === "website" ? "website" : "whatsapp",
+      discount:
+        order.discount_type && order.discount_value !== null
+          ? { type: order.discount_type, value: Number(order.discount_value), reason: order.discount_reason }
+          : null,
+      billDiscount: billDiscountByOrderId.get(order.id) ?? 0,
+      isDuplicate: order.duplicated_from !== null,
     };
   });
 

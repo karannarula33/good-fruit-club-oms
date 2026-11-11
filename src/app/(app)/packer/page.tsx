@@ -23,7 +23,7 @@ export default async function PackerPage({
 
   const { data: orders } = await supabase
     .from("orders")
-    .select("id, customer_id, status, cancel_reason")
+    .select("id, customer_id, status, cancel_reason, duplicated_from")
     .eq("delivery_date", date)
     .in("status", ["recorded", "packed", "cancelled"]);
 
@@ -141,6 +141,7 @@ export default async function PackerPage({
         id: order.id,
         status: order.status,
         cancelReason: order.cancel_reason ?? null,
+        isDuplicate: order.duplicated_from !== null,
         hasBill: billedIds.has(order.id),
         customerId: order.customer_id,
         customerName: customer?.display_name ?? "Unknown customer",
