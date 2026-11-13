@@ -1,6 +1,6 @@
 "use server";
 
-import { requireRole } from "@/lib/auth/require-role";
+import { requireOrderManager } from "@/lib/auth/order-manager";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { requireBillingAccess } from "@/lib/auth/billing-access";
@@ -36,8 +36,8 @@ export type GenerateBillResult =
 // send it. The admin opens the same order later to send it (generating again
 // returns the existing bill).
 export async function generateBill(orderId: string): Promise<GenerateBillResult> {
-  const { profile, isAdmin } = await requireBillingAccess();
-  const supabase = isAdmin ? await createClient() : createServiceRoleClient();
+  const { profile, isAdmin, isRealAdmin } = await requireBillingAccess();
+  const supabase = isRealAdmin ? await createClient() : createServiceRoleClient();
   const result = await generateBillWith(supabase, profile, orderId);
   if (!isAdmin && result.ok) return { ok: true, messageText: "", customerPhone: null, paymentLinkError: result.paymentLinkError };
   return result;
@@ -358,8 +358,7 @@ export async function overrideLinePrice(
   newPrice: number,
   reason: string,
 ): Promise<OverrideLinePriceResult> {
-  const profile = await requireRole(["admin"]);
-  const supabase = await createClient();
+  const { profile, db: supabase } = await requireOrderManager();
 
   const { data: line, error: lineError } = await supabase
     .from("order_lines")
@@ -432,9 +431,9 @@ export async function overrideLineQuantity(
 ): Promise<OverrideLineQuantityResult> {
   // Admin, or a packer with billing access correcting the billed qty before
   // generating the bill (no RLS insert on quantity_overrides for packers).
-  const { profile, isAdmin } = await requireBillingAccess();
+  const { profile, isAdmin, isRealAdmin } = await requireBillingAccess();
   if (field === "actual" && !isAdmin) return { ok: false, error: "Only the admin can change the packed quantity." };
-  const supabase = isAdmin ? await createClient() : createServiceRoleClient();
+  const supabase = isRealAdmin ? await createClient() : createServiceRoleClient();
 
   const { data: line, error: lineError } = await supabase
     .from("order_lines")

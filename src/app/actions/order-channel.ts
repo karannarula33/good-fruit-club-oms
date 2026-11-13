@@ -6,14 +6,12 @@
 // site order number in the paste); this is for the odd one that didn't.
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
+import { requireOrderManager } from "@/lib/auth/order-manager";
 import type { OrderChannel } from "@/lib/supabase/database.types";
 
 export async function setOrderChannel(orderId: string, channel: OrderChannel): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireRole(["admin"]);
+  const { db: supabase } = await requireOrderManager();
   if (channel !== "website" && channel !== "whatsapp") return { ok: false, error: "Unknown channel." };
-  const supabase = await createClient();
   const { error } = await supabase.from("orders").update({ channel }).eq("id", orderId);
   if (error) return { ok: false, error: error.message };
   revalidatePath("/admin/manage-orders");

@@ -24,9 +24,13 @@ export async function getBillingAccess() {
     .single();
   if (!profile?.role) redirect("/");
 
-  const isAdmin = profile.role === "admin";
+  // Full billing (prices, totals, bill text, send, overrides): the admin and
+  // the engagement role (src/lib/auth/order-manager.ts). `isAdmin` here means
+  // full billing rights; `isRealAdmin` is the admin login itself.
+  const isRealAdmin = profile.role === "admin";
+  const isAdmin = isRealAdmin || profile.role === "engagement";
   const canGenerateBills = isAdmin || (profile.role === "packer" && user.app_metadata?.can_generate_bills === true);
-  return { profile, isAdmin, canGenerateBills };
+  return { profile, isAdmin, isRealAdmin, canGenerateBills };
 }
 
 export async function requireBillingAccess() {

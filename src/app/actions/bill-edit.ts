@@ -42,7 +42,7 @@ async function billedOrder(supabase: Client, orderId: string) {
 }
 
 export async function editBilledLine(orderId: string, lineId: string, edit: BillLineEdit): Promise<BillEditResult> {
-  const profile = await requireRole(["admin"]);
+  const profile = await requireRole(["admin", "engagement"]);
   const valid = validateBillLineEdit(edit);
   if (!valid.ok) return valid;
   const supabase = createServiceRoleClient();
@@ -85,7 +85,7 @@ export async function editBilledLine(orderId: string, lineId: string, edit: Bill
 // Removing an item from a billed order marks it unavailable (kept for the
 // record, dropped from the bill), the same as at packing.
 export async function removeBilledLine(orderId: string, lineId: string): Promise<BillEditResult> {
-  await requireRole(["admin"]);
+  await requireRole(["admin", "engagement"]);
   const supabase = createServiceRoleClient();
   const guard = await billedOrder(supabase, orderId);
   if (!guard.ok) return guard;
@@ -99,7 +99,7 @@ export async function removeBilledLine(orderId: string, lineId: string): Promise
 }
 
 export async function addBilledLine(orderId: string, productId: string, qty: number, price: number): Promise<BillEditResult> {
-  const profile = await requireRole(["admin"]);
+  const profile = await requireRole(["admin", "engagement"]);
   const valid = validateBillLineEdit({ qty, price });
   if (!valid.ok) return valid;
   const supabase = createServiceRoleClient();
@@ -142,7 +142,7 @@ export async function setOrderDiscount(
   orderId: string,
   input: { type: "amount" | "percent"; value: number; reason: string } | null,
 ): Promise<DiscountResult> {
-  const profile = await requireRole(["admin"]);
+  const profile = await requireRole(["admin", "engagement"]);
   const supabase = createServiceRoleClient();
   const { data: order } = await supabase.from("orders").select("id, status").eq("id", orderId).maybeSingle();
   if (!order) return { ok: false, error: "Order not found." };
@@ -177,7 +177,7 @@ export async function setOrderDiscount(
 
 // The current bill text, to send it again after an edit.
 export async function getBillMessage(orderId: string): Promise<BillEditResult> {
-  await requireRole(["admin"]);
+  await requireRole(["admin", "engagement"]);
   const supabase = createServiceRoleClient();
   const { data: bill } = await supabase.from("bills").select("total, message_text, orders(customers(phone))").eq("order_id", orderId).maybeSingle();
   if (!bill) return { ok: false, error: "This order isn't billed yet." };

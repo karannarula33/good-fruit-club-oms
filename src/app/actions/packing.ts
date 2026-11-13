@@ -1,7 +1,7 @@
 "use server";
 
 import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
+import { dbForRole } from "@/lib/auth/order-manager";
 import {
   buildFinalizeOrderPlan,
   type PackingLineResolution,
@@ -31,7 +31,7 @@ export async function finalizeOrder(
   substitutions: SubstitutionInput[],
   newPackages: NewPackageInput[] = [],
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireRole(["packer", "admin"]);
+  const caller = await requireRole(["packer", "admin", "engagement"]);
 
   for (const pkg of newPackages) {
     if (!VALID_PACKAGING_TYPES.has(pkg.packagingType)) {
@@ -39,7 +39,7 @@ export async function finalizeOrder(
     }
   }
 
-  const supabase = await createClient();
+  const supabase = await dbForRole(caller.role);
 
   const { data: order, error: orderError } = await supabase
     .from("orders")

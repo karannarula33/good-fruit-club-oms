@@ -7,7 +7,9 @@
 // src/lib/auth/billing-access.ts), and admin edits to a billed order, which
 // rewrite the append-only bill/ledger rows (src/app/actions/bill-edit.ts), and
 // Learn GFC (src/app/actions/training.ts, src/lib/training/load.ts), whose
-// learners may only read their own rows so the server grades and records.
+// learners may only read their own rows so the server grades and records,
+// and Manage Orders / billing / packing for the engagement role
+// (src/lib/auth/order-manager.ts).
 
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/lib/supabase/database.types";

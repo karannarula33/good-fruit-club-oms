@@ -69,13 +69,13 @@ export async function updateCustomerSalutation(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   // A packer with billing access hits the same Sir/Ma'am picker at billing
   // time; they have no RLS write on customers, hence the service-role client.
-  const { isAdmin } = await requireBillingAccess();
+  const { isRealAdmin } = await requireBillingAccess();
 
   if (!VALID_SALUTATIONS.includes(salutation as Salutation)) {
     return { ok: false, error: `Unknown salutation: ${salutation}` };
   }
 
-  const supabase = isAdmin ? await createClient() : createServiceRoleClient();
+  const supabase = isRealAdmin ? await createClient() : createServiceRoleClient();
   const { error } = await supabase
     .from("customers")
     .update({ salutation: salutation as Salutation })

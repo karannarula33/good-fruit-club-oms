@@ -49,7 +49,7 @@ function done(): Result {
 // Writes go through the service role after the checks above: packers have
 // no delete rights on order_lines and can't read prices.
 export async function updateToPackLineQty(orderId: string, lineId: string, qty: number): Promise<Result> {
-  await requireRole(["packer", "admin"]);
+  await requireRole(["packer", "admin", "engagement"]);
   if (!validQty(qty)) return { ok: false, error: "Enter a quantity greater than zero." };
   const db = createServiceRoleClient();
   const o = await loadToPackOrder(db, orderId);
@@ -62,7 +62,7 @@ export async function updateToPackLineQty(orderId: string, lineId: string, qty: 
 }
 
 export async function removeToPackLine(orderId: string, lineId: string): Promise<Result> {
-  await requireRole(["packer", "admin"]);
+  await requireRole(["packer", "admin", "engagement"]);
   const db = createServiceRoleClient();
   const o = await loadToPackOrder(db, orderId);
   if (!o.ok) return o;
@@ -81,7 +81,7 @@ export async function removeToPackLine(orderId: string, lineId: string): Promise
 }
 
 export async function addToPackLine(orderId: string, productId: string, qty: number): Promise<Result> {
-  const profile = await requireRole(["packer", "admin"]);
+  const profile = await requireRole(["packer", "admin", "engagement"]);
   if (!productId) return { ok: false, error: "Pick an item." };
   if (!validQty(qty)) return { ok: false, error: "Enter a quantity greater than zero." };
   const db = createServiceRoleClient();
@@ -106,7 +106,7 @@ export async function addToPackLine(orderId: string, productId: string, qty: num
 }
 
 export async function cancelToPackOrder(orderId: string, reason: string): Promise<Result> {
-  const profile = await requireRole(["packer", "admin"]);
+  const profile = await requireRole(["packer", "admin", "engagement"]);
   const r = cleanCancelReason(reason);
   if (!r.ok) return r;
   const db = createServiceRoleClient();

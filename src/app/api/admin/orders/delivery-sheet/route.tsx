@@ -11,7 +11,7 @@
 import path from "path";
 import { Document, Font, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
+import { dbForRole } from "@/lib/auth/order-manager";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { zoneHeaderLabel, deriveZoneFromAddress, type Zone } from "@/lib/customers/zone";
 import { buildDeliverySheetZoneGroups, formatDeliveryDateHeader } from "@/lib/orders/delivery-sheet";
@@ -113,12 +113,12 @@ function DeliverySheetDocument({
 }
 
 export async function GET(request: Request) {
-  await requireRole(["admin"]);
+  const caller = await requireRole(["admin", "engagement"]);
 
   const url = new URL(request.url);
   const date = url.searchParams.get("date") ?? utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
-  const supabase = await createClient();
+  const supabase = await dbForRole(caller.role);
 
   const { data: orders } = await supabase
     .from("orders")

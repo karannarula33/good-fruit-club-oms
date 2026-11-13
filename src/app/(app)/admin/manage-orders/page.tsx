@@ -1,5 +1,5 @@
 import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
+import { dbForRole } from "@/lib/auth/order-manager";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { summarizePackagingByOrder } from "@/lib/packing/packaging";
 import { PageHeader } from "@/components/ui/page-header";
@@ -14,12 +14,12 @@ export default async function ManageOrdersPage({
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
-  await requireRole(["admin"]);
+  const profile = await requireRole(["admin", "engagement"]);
 
   const params = await searchParams;
   const date = params.date ?? utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
-  const supabase = await createClient();
+  const supabase = await dbForRole(profile.role);
 
   const { data: orders } = await supabase
     .from("orders")

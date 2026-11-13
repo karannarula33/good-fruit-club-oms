@@ -1,6 +1,6 @@
 import { requireRole } from "@/lib/auth/require-role";
 import { getBillingAccess } from "@/lib/auth/billing-access";
-import { createClient } from "@/lib/supabase/server";
+import { dbForRole, isOrderManager } from "@/lib/auth/order-manager";
 import { utcToIstDatetimeLocal } from "@/lib/time/ist";
 import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
 import { resolveBillLinePrices } from "@/lib/billing/resolve-line-prices";
@@ -13,13 +13,13 @@ export default async function PackerPage({
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
-  const profile = await requireRole(["packer", "admin"]);
+  const profile = await requireRole(["packer", "admin", "engagement"]);
   const { canGenerateBills } = await getBillingAccess();
 
   const params = await searchParams;
   const date = params.date ?? utcToIstDatetimeLocal(new Date()).slice(0, 10);
 
-  const supabase = await createClient();
+  const supabase = await dbForRole(profile.role);
 
   const { data: orders } = await supabase
     .from("orders")
@@ -61,7 +61,8 @@ export default async function PackerPage({
   // admin viewing a packed order before Generate Bill, compute the same
   // "latest configured price" preview generateBill will persist -- display
   // only, nothing written here. A packer session never fetches price data.
-  const isAdmin = profile.role === "admin";
+  // Full billing view: the admin and the engagement role (order-manager.ts).
+  const isAdmin = isOrderManager(profile.role);
   const packedLines = (orderLines ?? []).filter((l) => l.line_status === "packed");
   let resolvedPriceByLineId = new Map<string, number | null>();
   if (isAdmin && packedLines.length > 0) {
@@ -165,7 +166,7 @@ export default async function PackerPage({
         date={date}
         orders={packingOrders}
         products={substituteProducts}
-        isAdmin={profile.role === "admin"}
+        isAdmin={isAdmin}
         canGenerateBills={canGenerateBills}
       />
     </div>

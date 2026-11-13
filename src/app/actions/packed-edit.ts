@@ -9,11 +9,11 @@
 
 import { revalidatePath } from "next/cache";
 import { requireBillingAccess } from "@/lib/auth/billing-access";
-import { createClient } from "@/lib/supabase/server";
+import { dbForRole } from "@/lib/auth/order-manager";
 
 type Result = { ok: true } | { ok: false; error: string };
 
-async function packedUnbilledOrder(supabase: Awaited<ReturnType<typeof createClient>>, orderId: string): Promise<Result> {
+async function packedUnbilledOrder(supabase: Awaited<ReturnType<typeof dbForRole>>, orderId: string): Promise<Result> {
   const { data: order } = await supabase.from("orders").select("status").eq("id", orderId).single();
   if (!order) return { ok: false, error: "Order not found." };
   if (order.status !== "packed") return { ok: false, error: "Only a packed order can be changed here." };
@@ -24,8 +24,8 @@ async function packedUnbilledOrder(supabase: Awaited<ReturnType<typeof createCli
 
 // Marks the item unavailable: kept for the record, left off the bill.
 export async function removePackedLine(orderId: string, lineId: string): Promise<Result> {
-  await requireBillingAccess();
-  const supabase = await createClient();
+  const { profile: caller } = await requireBillingAccess();
+  const supabase = await dbForRole(caller.role);
   const guard = await packedUnbilledOrder(supabase, orderId);
   if (!guard.ok) return guard;
   const { data: lines } = await supabase.from("order_lines").select("id, line_status").eq("order_id", orderId);
@@ -47,7 +47,7 @@ export async function removePackedLine(orderId: string, lineId: string): Promise
 export async function addPackedLine(orderId: string, productId: string, qty: number): Promise<Result> {
   const { profile } = await requireBillingAccess();
   if (!Number.isFinite(qty) || qty <= 0) return { ok: false, error: "Enter a quantity greater than zero." };
-  const supabase = await createClient();
+  const supabase = await dbForRole(profile.role);
   const guard = await packedUnbilledOrder(supabase, orderId);
   if (!guard.ok) return guard;
   const { data: product } = await supabase.from("products").select("unit_label").eq("id", productId).single();

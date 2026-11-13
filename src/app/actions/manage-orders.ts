@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireRole } from "@/lib/auth/require-role";
+import { requireOrderManager } from "@/lib/auth/order-manager";
 import { createClient } from "@/lib/supabase/server";
 import { loadPriceItemRecords, loadPriceTierRecords } from "@/lib/pricing/load";
 import { resolveTieredPriceForProduct } from "@/lib/pricing/resolve";
@@ -16,7 +16,7 @@ import type { OrderStatus } from "@/lib/supabase/database.types";
 // only until it's billed. Returns the order's status so callers that need
 // it (addOrderLine) don't have to re-fetch it.
 async function assertEditableOrder(
-  supabase: Awaited<ReturnType<typeof createClient>>,
+  supabase: Awaited<ReturnType<typeof createClient>> | ReturnType<typeof createServiceRoleClient>,
   orderId: string,
 ): Promise<{ ok: true; status: OrderStatus } | { ok: false; error: string }> {
   const { data: order, error: orderError } = await supabase
@@ -48,8 +48,7 @@ export async function deleteOrderLine(
   orderId: string,
   lineId: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireRole(["admin"]);
-  const supabase = await createClient();
+  const { db: supabase } = await requireOrderManager();
 
   const guard = await assertEditableOrder(supabase, orderId);
   if (!guard.ok) return guard;
@@ -66,12 +65,10 @@ export async function updateOrderLineQty(
   lineId: string,
   qty: number,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireRole(["admin"]);
+  const { db: supabase } = await requireOrderManager();
   if (!Number.isFinite(qty) || qty <= 0) {
     return { ok: false, error: "Enter a quantity greater than zero." };
   }
-
-  const supabase = await createClient();
 
   const guard = await assertEditableOrder(supabase, orderId);
   if (!guard.ok) return guard;
@@ -99,13 +96,11 @@ export async function addOrderLine(
   qty: number,
   unit: string | null,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireRole(["admin"]);
+  const { db: supabase } = await requireOrderManager();
   if (!productId) return { ok: false, error: "Pick a product." };
   if (!Number.isFinite(qty) || qty <= 0) {
     return { ok: false, error: "Enter a quantity greater than zero." };
   }
-
-  const supabase = await createClient();
 
   const guard = await assertEditableOrder(supabase, orderId);
   if (!guard.ok) return guard;
@@ -134,8 +129,7 @@ export async function addOrderLine(
 }
 
 export async function deleteOrder(orderId: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  await requireRole(["admin"]);
-  const supabase = await createClient();
+  const { db: supabase } = await requireOrderManager();
 
   const guard = await assertEditableOrder(supabase, orderId);
   if (!guard.ok) return guard;
@@ -157,7 +151,7 @@ export async function deleteOrder(orderId: string): Promise<{ ok: true } | { ok:
 // for that customer and day still merge into the original (the earliest
 // open order).
 export async function duplicateOrder(orderId: string): Promise<{ ok: true; orderId: string } | { ok: false; error: string }> {
-  const profile = await requireRole(["admin"]);
+  const { profile } = await requireOrderManager();
   // Service role: the copy is made in one go even when the original is
   // already packed or billed, after the admin check above.
   const supabase = createServiceRoleClient();

@@ -45,6 +45,8 @@ const TABS: Record<Role, { href: string; label: string }[]> = {
   engagement: [
     { href: "/learn", label: "Learn" },
     { href: "/admin/orders", label: "Orders" },
+    { href: "/packer", label: "Billing" },
+    { href: "/admin/manage-orders", label: "Manage" },
     { href: "/admin/engagement", label: "Engagement" },
     { href: "/delivery", label: "Route" },
   ],

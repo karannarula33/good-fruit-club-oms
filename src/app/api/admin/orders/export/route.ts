@@ -11,7 +11,7 @@
 
 import ExcelJS from "exceljs";
 import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
+import { dbForRole } from "@/lib/auth/order-manager";
 import { derivePaymentStatus } from "@/lib/billing/compute";
 import { formatIstDisplay } from "@/lib/time/ist";
 import { PACKAGING_LABEL } from "@/lib/packing/packaging";
@@ -90,7 +90,7 @@ function groupLinesByPackage(lines: ExportOrderLine[]): ExportOrderLine[][] {
 }
 
 export async function GET(request: Request) {
-  await requireRole(["admin"]);
+  const caller = await requireRole(["admin", "engagement"]);
 
   const url = new URL(request.url);
   const fromParam = url.searchParams.get("from");
@@ -101,7 +101,7 @@ export async function GET(request: Request) {
   const from = fromParam <= toParam ? fromParam : toParam;
   const to = fromParam <= toParam ? toParam : fromParam;
 
-  const supabase = await createClient();
+  const supabase = await dbForRole(caller.role);
 
   const { data: orders, error: ordersError } = await supabase
     .from("orders")
